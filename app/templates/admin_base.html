@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    /* Admin-specific styles */
+    
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .action-buttons {
+        white-space: nowrap;
+    }
+
+
+
+</style>
+{% endblock %}
+
+{% block content %}
+    <div class="header">
+        <h1>{% block page_title %}{% endblock %}</h1>
+        <div class="actions">
+            {% block header_actions %}{% endblock %}
+        </div>
+    </div>
+    
+    {% block admin_content %}{% endblock %}
+{% endblock %}

@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Quorum : Available Meetings{% endblock %}
+
+{% block extra_css %}
+<style>
+    .container {
+        max-width: 800px;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        margin-bottom: 1.25rem;
+    }
+
+    .status-message {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-radius: 0.375rem;
+        font-size: 0.9375rem;
+        font-weight: 500;
+    }
+
+    .status-checked-in {
+        background-color: var(--success-light);
+        color: var(--success-dark);
+    }
+    
+    .status-not-checked-in {
+        background-color: var(--danger-light);
+        color: var(--danger-dark);
+    }
+
+    .election-list {
+        margin-top: 1.5rem;
+    }
+    
+    .election-item {
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .election-item:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    
+    .election-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin: 0 0 1rem 0;
+        color: var(--text-color);
+    }
+
+    .vote-cast {
+        background-color: var(--success-light);
+        color: var(--success-dark);
+    }
+    
+    .no-meetings {
+        text-align: center;
+        color: var(--text-muted);
+        padding: 2rem;
+        grid-column: 1 / -1;
+    }
+    
+    .btn {
+        width: 100%;
+    }
+
+</style>
+{% endblock %}
+
+{% block content %}
+    <div class="page-header">
+        <h1 class="page-title">Available Meetings</h1>
+    </div>
+        
+    {% if meetings %}
+        <div class="card-grid">
+        {% for meeting in meetings %}
+        <div class="card">
+            <div class="meeting-date">
+                {{ meeting.start_time|strftime("%B %d, %Y") }}
+            </div>
+            <div class="meeting-time">
+                {{ meeting.start_time|strftime("%I:%M %p") }} - {{ meeting.end_time|strftime("%I:%M %p") }}
+            </div>
+            {% if meeting.checked_in %}
+                <div class="status-badge status-checked-in">
+                    ✓ Checked In
+                </div>
+                <div class="election-list">
+                    {% if not meeting.elections %}
+                        <div class="no-elections">
+                            <p>No elections available for this meeting.</p>
+                        </div>
+                    {% else %}
+                        {% for election in meeting.elections %}
+                            <div class="election-item">
+                                <h3 class="election-title">{{ election.name }}</h3>
+                                <div class="vote-status">
+                                    {% if election.vote %}
+                                        <div class="status-message vote-cast">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                            <span>You have voted: <strong>{{ election.vote }}</strong></span>
+                                        </div>
+                                    {% else %}
+                                        <a href="{{ url_for('public.vote', election_id=election.id) }}" class="btn btn-primary">
+                                            Vote Now
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            {% else %}
+                <div class="status-badge status-not-checked-in">
+                    Not Checked In
+                </div>
+                <a href="{{ url_for('public.checkin', meeting_id=meeting.id) }}" class="btn btn-primary">
+                    Check In
+                </a>
+            {% endif %}
+        </div>
+        {% endfor %}
+        </div>
+    {% else %}
+        <div class="no-meetings">
+            <p>No meetings are currently available. Please check back later.</p>
+        </div>
+    {% endif %}
+
+{% endblock %}

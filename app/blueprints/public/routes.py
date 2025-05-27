@@ -92,40 +92,43 @@ def checkin(
                 return redirect(url_for("public.home"))
 
             # Process the check-in using the logic layer
-            vote_token, success = logic.checkin(db, meeting_id, meeting_code)
-            if not success:
-                error_message = vote_token
-                flash(error_message, "error")
+            try:
+                vote_token = logic.checkin(db, meeting_id, meeting_code)
+
+                # Update session state
+                if "checked_in_meetings" not in session:
+                    session["checked_in_meetings"] = []
+                if meeting_id not in session["checked_in_meetings"]:
+                    session["checked_in_meetings"].append(meeting_id)
+
+                # Store the vote token for this meeting
+                if "meeting_tokens" not in session:
+                    session["meeting_tokens"] = {}
+                session["meeting_tokens"][str(meeting_id)] = vote_token
+                session.modified = True
+
+                # Set a cookie to prevent duplicate check-ins
+                flash("You are checked in!", "success")
+                response = redirect(url_for("public.home"))
+                response.set_cookie(
+                    f"meeting_{meeting_id}",
+                    "checked_in",
+                    max_age=3600 * current_app.config["MEETING_DURATION_HOURS"],
+                    httponly=True,
+                    secure=request.is_secure,
+                    samesite="Lax",
+                )
+                return response
+            except ValueError as e:
+                flash(str(e), "error")
                 return redirect(url_for("public.home"))
-
-            # Update session state
-            if "checked_in_meetings" not in session:
-                session["checked_in_meetings"] = []
-            if meeting_id not in session["checked_in_meetings"]:
-                session["checked_in_meetings"].append(meeting_id)
-
-            # Store the vote token for this meeting
-            if "meeting_tokens" not in session:
-                session["meeting_tokens"] = {}
-            session["meeting_tokens"][str(meeting_id)] = vote_token
-            session.modified = True
-
-            # Set a cookie to prevent duplicate check-ins
-            flash("You are checked in!", "success")
-            response = redirect(url_for("public.home"))
-            response.set_cookie(
-                f"meeting_{meeting_id}",
-                "checked_in",
-                max_age=3600 * current_app.config["MEETING_DURATION_HOURS"],
-                httponly=True,
-                secure=request.is_secure,
-                samesite="Lax",
-            )
-            return response
 
         # For GET requests, show the check-in form
         # Get meeting details
         meeting = logic.get_meeting(db, meeting_id)
+        if not meeting:
+            flash(f"Invalid meeting ID ({meeting_id})", "error")
+            return redirect(url_for("public.home"))
 
         return render_template(
             "checkin.html",
@@ -179,13 +182,11 @@ def vote(
                 return redirect(url_for("public.home", election_id=election_id))
 
             vote = request.form["vote"]
-            message, success = logic.vote_in_election(
-                db, meeting_id, election_id, vote_token, vote
-            )
-            if not success:
-                flash(message, "error")
-            else:
-                flash(message, "success")
+            try:
+                logic.vote_in_election(db, meeting_id, election_id, vote_token, vote)
+                flash("Vote recorded successfully", "success")
+            except ValueError as e:
+                flash(str(e), "error")
             return redirect(url_for("public.home"))
 
         # For GET requests, show the voting form

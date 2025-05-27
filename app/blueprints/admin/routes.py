@@ -122,7 +122,7 @@ def meeting_delete(meeting_id):
         return resp
     db = next(get_db_session())
     success = delete_meeting(db, meeting_id)
-    flash("Deleted" if success else "Not found", "info")
+    flash("Meeting deleted" if success else "Meeting not found", "info")
     return redirect(url_for("admin.dashboard"))
 
 
@@ -136,7 +136,7 @@ def election_create(meeting_id):
         try:
             name = request.form["name"]
             create_election(db, meeting_id, name)
-            flash(f'Election "{name}" created', "success")
+            flash(f'Election created (name: "{name}")', "success")
             return redirect(url_for("admin.dashboard"))
         except Exception as e:
             flash(str(e), "error")
@@ -152,7 +152,7 @@ def election_delete(meeting_id, election_id):
         return resp
     db = next(get_db_session())
     success = delete_election(db, meeting_id, election_id)
-    flash("Deleted" if success else "Not found", "info")
+    flash("Election deleted" if success else "Election not found", "info")
     return redirect(url_for("admin.dashboard"))
 
 

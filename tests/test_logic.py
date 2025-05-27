@@ -17,6 +17,7 @@ from app.logic import (
     get_user_votes,
     get_vote_counts,
     is_meeting_available,
+    vote_in_election,
 )
 from app.models import Checkin, Election, ElectionVote, Meeting
 
@@ -497,8 +498,7 @@ def test_checkin_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    vote_token, success = checkin(db_connection, meeting.id, meeting_code)
-    assert success is True
+    vote_token = checkin(db_connection, meeting.id, meeting_code)
     assert len(vote_token) > 0
 
     # Verify the check-in was recorded
@@ -514,9 +514,8 @@ def test_checkin_invalid_meeting_id(db_connection: Session):
     """Test check-in with a non-existent meeting ID."""
     invalid_meeting_id = 999999
     meeting_code = "TESTCODE"
-    error_message, success = checkin(db_connection, invalid_meeting_id, meeting_code)
-    assert success is False
-    assert "Meeting not found" in error_message
+    with pytest.raises(ValueError, match="Meeting not found"):
+        checkin(db_connection, invalid_meeting_id, meeting_code)
 
 
 def test_checkin_invalid_meeting_code(db_connection: Session):
@@ -530,9 +529,8 @@ def test_checkin_invalid_meeting_code(db_connection: Session):
     db_connection.commit()
 
     invalid_meeting_code = "WRONGCODE"
-    error_message, success = checkin(db_connection, meeting.id, invalid_meeting_code)
-    assert success is False
-    assert "Invalid meeting code" in error_message
+    with pytest.raises(ValueError, match="Invalid meeting code"):
+        checkin(db_connection, meeting.id, invalid_meeting_code)
 
 
 def test_checkin_meeting_not_available(db_connection: Session):
@@ -546,9 +544,8 @@ def test_checkin_meeting_not_available(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    error_message, success = checkin(db_connection, meeting.id, meeting_code)
-    assert success is False
-    assert "Meeting is not available" in error_message
+    with pytest.raises(ValueError, match="Meeting is not available"):
+        checkin(db_connection, meeting.id, meeting_code)
 
 
 def test_checkin_duplicate_token(db_connection: Session):
@@ -569,8 +566,7 @@ def test_checkin_duplicate_token(db_connection: Session):
     db_connection.commit()
 
     # Second check-in with same code should generate a different token
-    second_token, success = checkin(db_connection, meeting.id, meeting_code)
-    assert success is True
+    second_token = checkin(db_connection, meeting.id, meeting_code)
     assert second_token is not None
     assert first_token != second_token  # Tokens should be different
 
@@ -810,3 +806,201 @@ def test_get_vote_counts(db_connection: Session):
         "G": 0,
         "H": 0,
     }
+
+
+def test_vote_in_election_success(db_connection: Session):
+    """Test successfully voting in an election."""
+    # Create a meeting
+    start_time = datetime.now() - timedelta(minutes=10)
+    end_time = datetime.now() + timedelta(hours=1)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="ABC123",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create an election
+    election = Election(meeting_id=meeting.id, name="Test Election")
+    db_connection.add(election)
+    db_connection.commit()
+
+    # Create a check-in
+    vote_token = "test_token_123"
+    checkin = Checkin(
+        meeting_id=meeting.id,
+        vote_token=vote_token,
+        timestamp=datetime.now(),
+    )
+    db_connection.add(checkin)
+    db_connection.commit()
+
+    vote_in_election(
+        db=db_connection,
+        meeting_id=meeting.id,
+        election_id=election.id,
+        vote_token=vote_token,
+        vote="A",
+    )
+
+    # Verify the vote was recorded
+    vote = (
+        db_connection.query(ElectionVote)
+        .filter(
+            ElectionVote.election_id == election.id,
+            ElectionVote.vote_token == vote_token,
+        )
+        .one_or_none()
+    )
+    assert vote is not None
+    assert vote.vote == "A"
+
+
+def test_vote_in_election_invalid_election(db_connection: Session):
+    """Test voting with an invalid election ID."""
+    # Create a meeting
+    start_time = datetime.now() - timedelta(minutes=10)
+    end_time = datetime.now() + timedelta(hours=1)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="ABC123",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create a check-in
+    vote_token = "test_token_123"
+    checkin = Checkin(
+        meeting_id=meeting.id,
+        vote_token=vote_token,
+        timestamp=datetime.now(),
+    )
+    db_connection.add(checkin)
+    db_connection.commit()
+
+    with pytest.raises(ValueError, match="Invalid election"):
+        vote_in_election(
+            db=db_connection,
+            meeting_id=meeting.id,
+            election_id=999,  # Non-existent election
+            vote_token=vote_token,
+            vote="A",
+        )
+
+
+def test_vote_in_election_already_voted(db_connection: Session):
+    """Test that a user cannot vote twice in the same election."""
+    # Create a meeting
+    start_time = datetime.now() - timedelta(minutes=10)
+    end_time = datetime.now() + timedelta(hours=1)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="ABC123",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create an election
+    election = Election(meeting_id=meeting.id, name="Test Election")
+    db_connection.add(election)
+    db_connection.commit()
+
+    # Create a check-in
+    vote_token = "test_token_123"
+    checkin = Checkin(
+        meeting_id=meeting.id,
+        vote_token=vote_token,
+        timestamp=datetime.now(),
+    )
+    db_connection.add(checkin)
+    db_connection.commit()
+
+    # Record a vote
+    vote = ElectionVote(
+        election_id=election.id,
+        vote_token=vote_token,
+        vote="A",
+    )
+    db_connection.add(vote)
+    db_connection.commit()
+
+    # Try to vote again with the same token
+    with pytest.raises(ValueError, match="already voted"):
+        vote_in_election(
+            db=db_connection,
+            meeting_id=meeting.id,
+            election_id=election.id,
+            vote_token=vote_token,
+            vote="B",  # Different vote
+        )
+
+
+def test_vote_in_election_invalid_token(db_connection: Session):
+    """Test voting with an invalid token."""
+    # Create a meeting
+    start_time = datetime.now() - timedelta(minutes=10)
+    end_time = datetime.now() + timedelta(hours=1)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="ABC123",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create an election
+    election = Election(meeting_id=meeting.id, name="Test Election")
+    db_connection.add(election)
+    db_connection.commit()
+
+    # Try to vote with an invalid token
+    with pytest.raises(ValueError, match="Invalid token"):
+        vote_in_election(
+            db=db_connection,
+            meeting_id=meeting.id,
+            election_id=election.id,
+            vote_token="invalid_token",
+            vote="A",
+        )
+
+
+def test_vote_in_election_meeting_ended(db_connection: Session):
+    """Test that voting is not allowed after the meeting has ended."""
+    # Create a meeting that has already ended
+    start_time = datetime.now() - timedelta(hours=2)
+    end_time = datetime.now() - timedelta(hours=1)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="ABC123",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create an election
+    election = Election(meeting_id=meeting.id, name="Test Election")
+    db_connection.add(election)
+    db_connection.commit()
+
+    # Create a check-in (even though meeting has ended, the check-in exists)
+    vote_token = "test_token_123"
+    checkin = Checkin(
+        meeting_id=meeting.id,
+        vote_token=vote_token,
+        timestamp=datetime.now(),
+    )
+    db_connection.add(checkin)
+    db_connection.commit()
+
+    # Try to vote after meeting has ended
+    with pytest.raises(ValueError, match="Voting has ended"):
+        vote_in_election(
+            db=db_connection,
+            meeting_id=meeting.id,
+            election_id=election.id,
+            vote_token=vote_token,
+            vote="A",
+        )

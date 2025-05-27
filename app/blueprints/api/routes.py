@@ -51,11 +51,10 @@ def checkin(meeting_id: int, meeting_code: str) -> tuple[FlaskResponse, int]:
 
     db = next(get_db_session())
     try:
-        token, success = logic.checkin(db, meeting_id, meeting_code)
-        if not success:
-            return jsonify({"error": "Invalid meeting or code"}), 404
-
+        token = logic.checkin(db, meeting_id, meeting_code)
         return jsonify({"token": token}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:

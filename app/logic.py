@@ -281,7 +281,7 @@ def delete_election(db: Session, meeting_id: int, election_id: int) -> bool:
         raise
 
 
-def checkin(db: Session, meeting_id: int, meeting_code: str) -> tuple[str, bool]:
+def checkin(db: Session, meeting_id: int, meeting_code: str) -> str:
     """Process a meeting check-in.
 
     Args:
@@ -290,8 +290,12 @@ def checkin(db: Session, meeting_id: int, meeting_code: str) -> tuple[str, bool]
         meeting_code: The meeting code to validate
 
     Returns:
-        tuple: (vote_token, success) - The vote token if successful, error message if not,
-              and a boolean indicating success
+        str: vote_token - The vote token
+
+    Raises:
+        ValueError if meeting ID does not exist,
+                   meeting code is invalid,
+                   or meeting is not available
     """
     try:
         # Get the meeting with the given ID
@@ -299,11 +303,11 @@ def checkin(db: Session, meeting_id: int, meeting_code: str) -> tuple[str, bool]
 
         # Verify the meeting code
         if meeting_code != meeting.meeting_code:
-            return "Invalid meeting code", False
+            raise ValueError("Invalid meeting code")
 
         # Check if the meeting is currently available for check-in
         if not is_meeting_available(meeting.start_time, meeting.end_time):
-            return "Meeting is not available", False
+            raise ValueError("Meeting is not available")
 
         # Generate a unique vote token
         vote_token = make_pronounceable(8)
@@ -317,11 +321,11 @@ def checkin(db: Session, meeting_id: int, meeting_code: str) -> tuple[str, bool]
         db.commit()
         db.refresh(checkin)
 
-        return vote_token, True
+        return vote_token
 
     except NoResultFound:
         # Meeting not found
-        return "Meeting not found", False
+        raise ValueError("Meeting not found")
     except IntegrityError:
         # If there's a duplicate token (very unlikely), try again
         db.rollback()
@@ -333,7 +337,7 @@ def checkin(db: Session, meeting_id: int, meeting_code: str) -> tuple[str, bool]
 
 def vote_in_election(
     db: Session, meeting_id: int, election_id: int, vote_token: str, vote: str
-) -> tuple[str, bool]:
+) -> None:
     """Process a vote in an election.
 
     Args:
@@ -343,8 +347,11 @@ def vote_in_election(
         vote_token: Token from check-in
         vote: The vote to record
 
-    Returns:
-        Tuple[str, bool]: A tuple containing a message and success status
+    Raises:
+        ValueError if election is invalid,
+                   user has already voted in this election,
+                   token is invalid for this meeting,
+                   or meeting is not available
     """
     try:
         # Check if the meeting exists
@@ -358,7 +365,7 @@ def vote_in_election(
         )
 
         if not election:
-            return "Invalid election", False
+            raise ValueError("Invalid election")
 
         # Check if user has already voted in this election
         existing_vote = (
@@ -371,7 +378,7 @@ def vote_in_election(
         )
 
         if existing_vote is not None:
-            return "You have already voted in this election", False
+            raise ValueError("You have already voted in this election")
 
         # Check if the token is valid for this meeting
         checkin = (
@@ -381,11 +388,11 @@ def vote_in_election(
         )
 
         if not checkin:
-            return "Invalid token for this meeting", False
+            raise ValueError("Invalid token for this meeting")
 
         # Check if the meeting is currently available for voting
         if not is_meeting_available(meeting.start_time, meeting.end_time):
-            return "Voting has ended", False
+            raise ValueError("Voting has ended")
 
         # Record the vote
         vote_record = ElectionVote(
@@ -394,17 +401,17 @@ def vote_in_election(
 
         db.add(vote_record)
         db.commit()
-        return "Vote recorded successfully", True
+        return None
 
     except NoResultFound:
         db.rollback()
-        return "Meeting not found", False
+        raise ValueError("Meeting not found")
     except IntegrityError as e:
         db.rollback()
-        return "Failed to record vote: " + str(e), False
+        raise ValueError("Failed to record vote: " + str(e))
     except Exception as e:
         db.rollback()
-        return "An error occurred while processing your vote: " + str(e), False
+        raise ValueError("An error occurred while processing your vote: " + str(e))
 
 
 def generate_qr_code(data: str, svg=True) -> io.BytesIO:

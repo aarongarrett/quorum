@@ -12,6 +12,7 @@ from app.logic import (
     delete_election,
     delete_meeting,
     generate_qr_code,
+    get_election,
     get_elections,
     get_meeting,
     get_user_votes,
@@ -669,6 +670,156 @@ def test_get_meeting_nonexistent_meeting(db_connection: Session):
     non_existent_meeting_id = 999999
     meeting = get_meeting(db_connection, non_existent_meeting_id)
     assert meeting is None
+
+
+def test_get_election_success(db_connection: Session):
+    """Test successfully retrieving an election with votes."""
+    # Create a meeting
+    start_time = datetime.now()
+    end_time = start_time + timedelta(hours=2)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="ABC123",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create an election
+    election = Election(meeting_id=meeting.id, name="Test Election")
+    db_connection.add(election)
+    db_connection.commit()
+
+    # Create a check-in and vote
+    vote_token = "test_token_123"
+    checkin = Checkin(
+        meeting_id=meeting.id,
+        vote_token=vote_token,
+        timestamp=datetime.now(),
+    )
+    db_connection.add(checkin)
+    db_connection.commit()
+
+    # Record a vote
+    vote = ElectionVote(
+        election_id=election.id,
+        vote_token=vote_token,
+        vote="A",
+    )
+    db_connection.add(vote)
+    db_connection.commit()
+
+    # Test getting the election
+    result = get_election(db_connection, election.id)
+
+    # Verify the result
+    assert result is not None
+    assert result["id"] == election.id
+    assert result["name"] == "Test Election"
+    assert result["meeting_id"] == meeting.id
+    assert isinstance(result["votes"], dict)
+    assert result["votes"]["A"] == 1  # One vote for A
+    assert result["total_votes"] == 1  # Total votes should be 1
+
+
+def test_get_election_no_votes(db_connection: Session):
+    """Test retrieving an election with no votes."""
+    # Create a meeting
+    start_time = datetime.now()
+    end_time = start_time + timedelta(hours=2)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="ABC123",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create an election
+    election = Election(meeting_id=meeting.id, name="Test Election No Votes")
+    db_connection.add(election)
+    db_connection.commit()
+
+    # Test getting the election
+    result = get_election(db_connection, election.id)
+
+    # Verify the result
+    assert result is not None
+    assert result["id"] == election.id
+    assert result["name"] == "Test Election No Votes"
+    assert result["meeting_id"] == meeting.id
+    assert isinstance(result["votes"], dict)
+    assert result["total_votes"] == 0  # No votes should be recorded
+    # Check that all vote options are present and set to 0
+    for option in "ABCDEFGH":
+        assert result["votes"][option] == 0
+
+
+def test_get_nonexistent_election(db_connection: Session):
+    """Test retrieving a non-existent election."""
+    non_existent_election_id = 999999
+    result = get_election(db_connection, non_existent_election_id)
+    assert result is None
+
+
+def test_get_election_with_multiple_votes(db_connection: Session):
+    """Test retrieving an election with multiple votes."""
+    # Create a meeting
+    start_time = datetime.now()
+    end_time = start_time + timedelta(hours=2)
+    meeting = Meeting(
+        start_time=start_time,
+        end_time=end_time,
+        meeting_code="MULTIVOTE",
+    )
+    db_connection.add(meeting)
+    db_connection.commit()
+
+    # Create an election
+    election = Election(meeting_id=meeting.id, name="Multi-Vote Election")
+    db_connection.add(election)
+    db_connection.commit()
+
+    # Create check-ins and votes
+    for i, vote_option in enumerate(
+        ["A", "B", "C", "A", "B", "A"]
+    ):  # 3 A's, 2 B's, 1 C
+        vote_token = f"token_{i}"
+        checkin = Checkin(
+            meeting_id=meeting.id,
+            vote_token=vote_token,
+            timestamp=datetime.now(),
+        )
+        db_connection.add(checkin)
+        db_connection.flush()  # Flush to get the checkin ID
+
+        vote = ElectionVote(
+            election_id=election.id,
+            vote_token=vote_token,
+            vote=vote_option,
+        )
+        db_connection.add(vote)
+
+    db_connection.commit()
+
+    # Test getting the election
+    result = get_election(db_connection, election.id)
+
+    # Verify the result
+    assert result is not None
+    assert result["id"] == election.id
+    assert result["name"] == "Multi-Vote Election"
+    assert result["meeting_id"] == meeting.id
+    assert result["total_votes"] == 6  # Total votes should be 6
+
+    # Verify vote counts
+    assert result["votes"]["A"] == 3
+    assert result["votes"]["B"] == 2
+    assert result["votes"]["C"] == 1
+
+    # Verify other options are 0
+    for option in "DEFGH":
+        assert result["votes"][option] == 0
 
 
 def test_get_user_votes_success(db_connection: Session):

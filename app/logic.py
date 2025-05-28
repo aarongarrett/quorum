@@ -87,15 +87,18 @@ def get_meetings(db: Session) -> list[dict[str, Any]]:
     return result
 
 
-def get_available_meetings(db: Session) -> list[tuple[int, str, str]]:
+def get_available_meetings(
+    db: Session, cookies: dict[str, str], meeting_tokens: dict[str, str]
+) -> list[dict[str, Any]]:
     """Retrieve all available meetings with their check-in status.
 
     Args:
         db: SQLAlchemy session
+        cookies: a dictionary of user cookies
 
     Returns:
-        list[tuple[int, str, str]]: List of meetings where each tuple contains
-            (meeting_id, start_time_isoformat, end_time_isoformat)
+        list[dict[str, Any]]: List of meetings where each dictionary contains
+            the meeting information and the election information for the current user
     """
     current_time = datetime.now()
 
@@ -106,13 +109,33 @@ def get_available_meetings(db: Session) -> list[tuple[int, str, str]]:
     available_meetings = []
     for meeting in meetings:
         if is_meeting_available(meeting.start_time, meeting.end_time, current_time):
-            available_meetings.append(
-                (
-                    meeting.id,
-                    meeting.start_time.isoformat(),
-                    meeting.end_time.isoformat(),
-                )
-            )
+            meeting_id = meeting.id
+            start_time = meeting.start_time.isoformat()
+            end_time = meeting.end_time.isoformat()
+            checked_in = cookies.get(f"meeting_{meeting_id}") is not None
+            meeting_info = {
+                "id": meeting_id,
+                "start_time": start_time,
+                "end_time": end_time,
+                "checked_in": checked_in,
+                "elections": [],
+            }
+            if checked_in:
+                # Fetch elections and user's votes
+                meeting = get_meeting(db, meeting_id)
+                vote_token = meeting_tokens.get(str(meeting_id))
+                if vote_token and meeting and meeting["end_time"] >= current_time:
+                    elections = get_elections(db, meeting_id)
+                    meeting_votes = get_user_votes(db, meeting_id, vote_token)
+                    meeting_info["elections"] = [
+                        {
+                            "id": e_id,
+                            "name": e_name,
+                            "vote": meeting_votes.get(e_id, {}).get("vote", ""),
+                        }
+                        for e_id, e_name in elections.items()
+                    ]
+            available_meetings.append(meeting_info)
 
     return available_meetings
 

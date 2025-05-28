@@ -344,6 +344,65 @@ Admin Dashboard
 
 {% block extra_js %}
 {{ super() }}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const eventSource = new EventSource('/api/admin/updates');
+    
+    eventSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            updateDashboard(data);
+        } catch (error) {
+            console.error('Error updating dashboard:', error);
+        }
+    };
+
+    eventSource.onerror = function() {
+        console.log('Connection lost, attempting to reconnect...');
+        eventSource.close();
+        setTimeout(() => {
+            window.location.reload();
+        }, 5000);
+    };
+
+    function updateDashboard(data) {
+        Object.entries(data).forEach(([meetingId, meetingData]) => {
+        // Update check-in count for this meeting
+        const checkinElements = document.querySelectorAll(`[data-meeting-id="${meetingId}"] .checkin-count`);
+        checkinElements.forEach(element => {
+            element.textContent = meetingData.checkins;
+        });
+
+        // Update elections for this meeting
+        if (meetingData.elections) {
+            Object.entries(meetingData.elections).forEach(([electionId, election]) => {
+                // Update total votes for this election
+                const voteCountElement = document.querySelector(
+                    `#vote-count-${electionId}`
+                );
+                if (voteCountElement) {
+                    voteCountElement.textContent = election.total_votes;
+                }
+
+                // Update individual vote options if needed
+                if (election.votes) {
+                    Object.entries(election.votes).forEach(([option, count]) => {
+                        const optionElement = document.querySelector(
+                            `#vote-${electionId}-${option}`
+                        );
+                        if (optionElement) {
+                            optionElement.textContent = count;
+                        }
+                    });
+                }
+            });
+        }
+        });
+    }
+});
+</script>
+
 <script>
     // Initialize delete meeting modal
     const deleteMeetingModal = new bootstrap.Modal(document.getElementById('deleteMeetingModal'));
@@ -386,49 +445,5 @@ Admin Dashboard
         });
     });
     
-    // Function to update vote counts
-    function updateVoteCounts() {
-        fetch('/api/stats/votes')
-            .then(response => response.json())
-            .then(data => {
-                // Update each election's vote counts
-                for (const [electionId, electionData] of Object.entries(data)) {
-                    const voteCountElement = document.getElementById(`vote-count-${electionId}`);
-                    if (voteCountElement) {
-                        voteCountElement.textContent = electionData.total_votes;
-                    }
-                    
-                    // Update individual vote counts (A-H)
-                    for (const [voteOption, count] of Object.entries(electionData.votes)) {
-                        const voteElement = document.getElementById(`vote-${electionId}-${voteOption}`);
-                        if (voteElement) {
-                            voteElement.textContent = count;
-                        }
-                    }
-                }
-            })
-            .catch(error => console.error('Error updating vote counts:', error));
-    }
-
-    // Function to update check-in counts
-    function updateCheckinCounts() {
-        fetch('/api/stats/checkins')
-            .then(response => response.json())
-            .then(data => {
-                // Update each meeting's check-in count
-                for (const [meetingId, count] of Object.entries(data)) {
-                    // Find all check-in count elements for this meeting
-                    const checkinElements = document.querySelectorAll(`[data-meeting-id="${meetingId}"] .checkin-count`);
-                    checkinElements.forEach(element => {
-                        element.textContent = count;
-                    });
-                }
-            })
-            .catch(error => console.error('Error updating check-in counts:', error));
-    }
-    
-    // Update counts every 3 seconds
-    setInterval(updateVoteCounts, 3000);
-    setInterval(updateCheckinCounts, 3000);
 </script>
 {% endblock %}

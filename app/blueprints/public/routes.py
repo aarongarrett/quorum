@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from flask import Blueprint
 from flask import Response as FlaskResponse
 from flask import (
@@ -23,36 +21,10 @@ public_bp = Blueprint("public", __name__, template_folder="templates")
 @public_bp.route("/")
 def home() -> FlaskResponse:
     db = next(get_db_session())
+    cookies = dict(request.cookies)
+    meeting_tokens = session.get("meeting_tokens", {})
     try:
-        current_time = datetime.now()
-        meetings = []
-        # Get available meetings
-        for meeting_data in logic.get_available_meetings(db):
-            meeting_id, start_time, end_time = meeting_data
-            checked_in = request.cookies.get(f"meeting_{meeting_id}") is not None
-            meeting_info = {
-                "id": meeting_id,
-                "start_time": start_time,
-                "end_time": end_time,
-                "checked_in": checked_in,
-                "elections": [],
-            }
-            if checked_in:
-                # Fetch elections and user's votes
-                meeting = logic.get_meeting(db, meeting_id)
-                if meeting and meeting["end_time"] >= current_time:
-                    elections = logic.get_elections(db, meeting_id)
-                    vote_token = session.get("meeting_tokens", {}).get(str(meeting_id))
-                    meeting_votes = logic.get_user_votes(db, meeting_id, vote_token)
-                    meeting_info["elections"] = [
-                        {
-                            "id": e_id,
-                            "name": e_name,
-                            "vote": meeting_votes.get(e_id, {}).get("vote", ""),
-                        }
-                        for e_id, e_name in elections.items()
-                    ]
-            meetings.append(meeting_info)
+        meetings = logic.get_available_meetings(db, cookies, meeting_tokens)
         return render_template("home.html", meetings=meetings)
     finally:
         db.close()

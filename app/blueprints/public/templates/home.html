@@ -8,6 +8,15 @@
         max-width: 800px;
     }
 
+    .card {
+        transition: all 0.3s ease;
+    }
+
+    .card.updating {
+        opacity: 0.5;
+        transform: scale(0.98);
+    }
+
     .status-badge {
         display: inline-flex;
         align-items: center;
@@ -77,6 +86,24 @@
         width: 100%;
     }
 
+    /* Animation for new/updated meetings */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .meeting-card {
+        animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    /* Hide empty container when no meetings */
+    #meetings-container:empty + .no-meetings {
+        display: block;
+    }
+    
+    .no-meetings {
+        display: none;
+    }
 </style>
 {% endblock %}
 
@@ -84,61 +111,157 @@
     <div class="page-header">
         <h1 class="page-title">Available Meetings</h1>
     </div>
-        
-    {% if meetings %}
-        <div class="card-grid">
-        {% for meeting in meetings %}
-        <div class="card">
-            <div class="meeting-date">
-                {{ meeting.start_time|strftime("%B %d, %Y") }}
-            </div>
-            <div class="meeting-time">
-                {{ meeting.start_time|strftime("%I:%M %p") }} - {{ meeting.end_time|strftime("%I:%M %p") }}
-            </div>
-            {% if meeting.checked_in %}
-                <div class="status-badge status-checked-in">
-                    ✓ Checked In
-                </div>
-                <div class="election-list">
-                    {% if not meeting.elections %}
-                        <div class="no-elections">
-                            <p>No elections available for this meeting.</p>
-                        </div>
-                    {% else %}
-                        {% for election in meeting.elections %}
-                            <div class="election-item">
-                                <h3 class="election-title">{{ election.name }}</h3>
-                                <div class="vote-status">
-                                    {% if election.vote %}
-                                        <div class="status-message vote-cast">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                            <span>You have voted: <strong>{{ election.vote }}</strong></span>
-                                        </div>
-                                    {% else %}
-                                        <a href="{{ url_for('public.vote', election_id=election.id) }}" class="btn btn-primary">
-                                            Vote Now
-                                        </a>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            {% else %}
-                <div class="status-badge status-not-checked-in">
-                    Not Checked In
-                </div>
-                <a href="{{ url_for('public.checkin', meeting_id=meeting.id) }}" class="btn btn-primary">
-                    Check In
-                </a>
-            {% endif %}
-        </div>
-        {% endfor %}
-        </div>
-    {% else %}
-        <div class="no-meetings">
-            <p>No meetings are currently available. Please check back later.</p>
-        </div>
-    {% endif %}
+    
+    <div id="meetings-container" class="card-grid">
+        <!-- Meetings will be dynamically inserted here -->
+    </div>
+    
+    <div class="no-meetings">
+        <p>No meetings are currently available. Please check back later.</p>
+    </div>
 
+    {% block extra_js %}
+    {{ super() }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('meetings-container');
+            const noMeetings = document.querySelector('.no-meetings');
+            
+            // Initial render of server-side meetings
+            const initialMeetings = {{ meetings|tojson|safe }};
+            updateMeetingsList(initialMeetings);
+            
+            // Set up SSE connection
+            const eventSource = new EventSource("/api/updates");
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    updateMeetingsList(data);
+                } catch (error) {
+                    console.error('Error parsing SSE data:', error);
+                }
+            };
+
+            eventSource.onerror = function() {
+                console.log('Connection lost, attempting to reconnect...');
+                eventSource.close();
+                setTimeout(() => window.location.reload(), 5000);
+            };
+        
+            function updateMeetingsList(meetings) {
+                if (!Array.isArray(meetings)) return;
+                
+                // Toggle no meetings message
+                noMeetings.style.display = meetings.length ? 'none' : 'block';
+                
+                // Create a map of existing meetings for quick lookup
+                const existingMeetings = new Map();
+                container.querySelectorAll('.meeting-card').forEach(card => {
+                    existingMeetings.set(parseInt(card.dataset.meetingId), card);
+                });
+                
+                // Process each meeting from the server
+                meetings.forEach(meeting => {
+                    const existingCard = existingMeetings.get(meeting.id);
+                    
+                    if (existingCard) {
+                        // Update existing meeting card
+                        updateMeetingCard(existingCard, meeting);
+                        existingMeetings.delete(meeting.id);
+                    } else {
+                        // Create new meeting card
+                        const newCard = createMeetingCard(meeting);
+                        container.prepend(newCard); // Add new meetings at the top
+                    }
+                });
+                
+                // Remove any meetings that are no longer in the list
+                existingMeetings.forEach(card => {
+                    card.classList.add('fade-out');
+                    setTimeout(() => card.remove(), 300);
+                });
+            }
+            
+            function createMeetingCard(meeting) {
+                const card = document.createElement('div');
+                card.className = 'card meeting-card';
+                card.dataset.meetingId = meeting.id;
+                updateMeetingCard(card, meeting);
+                return card;
+            }
+            
+            function updateMeetingCard(card, meeting) {
+                const startTime = new Date(meeting.start_time);
+                const endTime = new Date(meeting.end_time);
+                
+                let statusBadge = '';
+                if (meeting.checked_in) {
+                    statusBadge = `
+                        <div class="status-badge status-checked-in">
+                            ✓ Checked In
+                        </div>
+                        <div class="election-list">
+                            ${meeting.elections && meeting.elections.length > 0 
+                                ? meeting.elections.map(election => `
+                                    <div class="election-item" data-election-id="${election.id}">
+                                        <h3 class="election-title">${escapeHtml(election.name)}</h3>
+                                        <div class="vote-status">
+                                            ${election.vote 
+                                                ? `
+                                                    <div class="status-message vote-cast">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                                        <span>You have voted: <strong>${escapeHtml(election.vote)}</strong></span>
+                                                    </div>
+                                                ` 
+                                                : `
+                                                    <a href="{{ url_for('public.vote', election_id=0) }}${election.id}" class="btn btn-primary">
+                                                        Vote Now
+                                                    </a>
+                                                `
+                                            }
+                                        </div>
+                                    </div>
+                                `).join('')
+                                : '<div class="no-elections"><p>No elections available for this meeting.</p></div>'
+                            }
+                        </div>
+                    `;
+                } else {
+                    statusBadge = `
+                        <div class="status-badge status-not-checked-in">
+                            Not Checked In
+                        </div>
+                        <a href="{{ url_for('public.checkin', meeting_id=0) }}${meeting.id}" class="btn btn-primary">
+                            Check In
+                        </a>
+                    `;
+                }
+                
+                card.innerHTML = `
+                    <div class="meeting-date">
+                        ${startTime.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </div>
+                    <div class="meeting-time">
+                        ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - 
+                        ${endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    ${statusBadge}
+                `;
+                
+                return card;
+            }
+            
+            function escapeHtml(unsafe) {
+                if (!unsafe) return '';
+                return unsafe
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+        });
+    </script>
+    {% endblock %}
 {% endblock %}

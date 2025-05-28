@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 
@@ -13,18 +14,13 @@ def strftime(value: datetime | str, format: str = "%B %d, %Y %I:%M%p") -> str:
     Returns:
         str: The formatted date/time string
     """
-    if value is None:
+    if value is None or value == "":
         return ""
 
-    # Convert string to datetime if needed
     if isinstance(value, str):
         value = datetime.fromisoformat(value)
-
-    # Format the date and time
     formatted = value.strftime(format)
-    # Remove leading zero from hour if present
-    if " 0" in formatted:
-        formatted = formatted.replace(" 0", " ")
+    formatted = re.sub(r"(?<=\s)0|^0", "", formatted)
     # Convert AM/PM to lowercase
     formatted = formatted.replace("AM", "am").replace("PM", "pm")
     return formatted

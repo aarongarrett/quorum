@@ -86,41 +86,6 @@ def meeting_stream():
     )
 
 
-"""
-@api_bp.route("/stats/checkins")
-def checkins():
-    if not session.get("is_admin"):
-        return jsonify({"error": "Unauthorized"}), 401
-    db = next(get_db_session())
-    try:
-        result = {}
-        for meeting in logic.get_meetings(db):
-            result[str(meeting["id"])] = logic.get_checkin_count(db, meeting["id"])
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        db.close()
-
-
-@api_bp.route("/stats/votes")
-def votes():
-    if not session.get("is_admin"):
-        return jsonify({"error": "Unauthorized"}), 401
-    db = next(get_db_session())
-    try:
-        result = {}
-        for meeting in logic.get_meetings(db):
-            for election_id in logic.get_elections(db, meeting["id"]):
-                result[str(election_id)] = logic.get_election(db, election_id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        db.close()
-"""
-
-
 @api_bp.route("/checkin/<int:meeting_id>/<meeting_code>", methods=["POST"])
 def checkin(meeting_id: int, meeting_code: str) -> tuple[FlaskResponse, int]:
     """API endpoint to check in to a meeting"""

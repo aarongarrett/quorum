@@ -164,12 +164,6 @@ def create_meeting(
     if end_time <= start_time:
         raise ValueError("End time must be after start time")
 
-    # Ensure end time is within the same day
-    if end_time.day > start_time.day:
-        end_time = datetime.combine(
-            start_time.date(), datetime.strptime("23:59", "%H:%M").time()
-        )
-
     # Try to create a meeting with a unique code (retry once if code exists)
     for _ in range(2):
         meeting_code = generate_meeting_code()

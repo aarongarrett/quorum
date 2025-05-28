@@ -161,30 +161,6 @@ def test_create_meeting_success(db_connection: Session):
     assert meeting.meeting_code == meeting_code
 
 
-def test_create_meeting_overnight(db_connection: Session):
-    """Test creating a meeting that spans two days."""
-    now = datetime.now()
-    start_time = datetime(now.year, now.month, now.day, 23, 0)  # 11 PM
-    end_time = start_time + timedelta(hours=2)  # 1 AM next day
-    expected_end_time = datetime(now.year, now.month, now.day, 23, 59)
-
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
-
-    # Verify the meeting was created
-    assert meeting_id is not None
-    assert isinstance(meeting_id, int)
-    assert isinstance(meeting_code, str)
-    assert len(meeting_code) == 8
-    assert all(c.isupper() for c in meeting_code)
-
-    # Verify the meeting exists in the database
-    meeting = db_connection.get(Meeting, meeting_id)
-    assert meeting is not None
-    assert meeting.start_time == start_time
-    assert meeting.end_time == expected_end_time
-    assert meeting.meeting_code == meeting_code
-
-
 def test_create_meeting_duplicate_code_handling(db_connection: Session, monkeypatch):
     """Test that the function handles duplicate meeting codes by retrying."""
 

@@ -1,0 +1,36 @@
+services:
+  web:
+    build: .
+    command: flask run --host=0.0.0.0 --port=5000 --reload
+    environment:
+      FLASK_APP: run.py
+      FLASK_ENV: testing
+      DATABASE_URL: sqlite:///test.db
+    volumes:
+      - .:/app
+    ports:
+      - "5000:5000"
+
+  selenium:
+    image: selenium/standalone-chrome:117.0
+    # ensure it matches the Chrome version installed in the Dockerfile above!
+    ports:
+      - "4444:4444"
+
+  tox:
+    build: .
+    working_dir: /app
+    entrypoint: ["tail", "-f", "/dev/null"]
+    tty: true
+    stdin_open: true
+    environment:
+      FLASK_ENV: testing
+      BASE_URL: http://web:5000
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+      TOX_ENV_DIR: /app/.tox_docker
+    volumes:
+      - .:/app
+    depends_on:
+      - web
+      - selenium
+

@@ -1,0 +1,8 @@
+# Ignore Python virtualenvs, tox envs, caches, git metadata
+.tox
+.mypy_cache
+venv
+.venv
+__pycache__
+*.pyc
+.git

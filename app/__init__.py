@@ -12,11 +12,11 @@ def create_app(config_name: str = "default") -> Flask:
     app = Flask(__name__, instance_relative_config=False)
     # Load our configuration
     app.config.from_object(app_config[config_name])
+    # Wire up the database (sets up engine & SessionLocal)
+    configure_database(app.config["DATABASE_URL"])
 
     app.add_template_filter(strftime, name="strftime")
 
-    # Wire up the database (sets up engine & SessionLocal)
-    configure_database(app.config["DATABASE_URL"])
     # Register blueprints
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/admin")

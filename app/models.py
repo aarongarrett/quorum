@@ -1,8 +1,50 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import TEXT, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class TZDateTime(TypeDecorator):
+    """
+    - SQLite -> TEXT storing full ISO8601 (with offset)
+    - Postgres -> TIMESTAMP WITH TIME ZONE
+    - Others -> DateTime(timezone=True)
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "sqlite":
+            return dialect.type_descriptor(TEXT())
+        else:
+            # Use the native timestamptz on Postgres, or DateTime(timezone=True) elsewhere
+            return dialect.type_descriptor(
+                postgresql.TIMESTAMP(timezone=True)
+                if dialect.name == "postgresql"
+                else DateTime(timezone=True)
+            )
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "sqlite":
+            if value.tzinfo is None:
+                raise ValueError("Naive datetime cannot be stored in TZDateTime")
+            return value.isoformat()
+        # On Postgres/others, leave it as a datetime and let the driver handle it
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "sqlite":
+            return datetime.fromisoformat(value)
+        # On Postgres/others, SQLAlchemy will already return an aware datetime
+        return value
 
 
 class Base(DeclarativeBase):
@@ -13,8 +55,8 @@ class Meeting(Base):
     __tablename__ = "meetings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    end_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    start_time: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
+    end_time: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
     meeting_code: Mapped[str] = mapped_column(String, unique=True, nullable=False)
 
     # Relationships
@@ -29,7 +71,7 @@ class Meeting(Base):
     def is_available(self, current_time: Optional[datetime] = None) -> bool:
         """Check if the meeting is currently available for check-in."""
         if current_time is None:
-            current_time = datetime.now()
+            current_time = datetime.now(timezone.utc)
 
         # Allow check-in 15 minutes before and 15 minutes after start
         checkin_start = self.start_time - timedelta(minutes=15)
@@ -61,7 +103,7 @@ class Checkin(Base):
         Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False
     )
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.now()
+        TZDateTime, nullable=False, default=datetime.now(timezone.utc)
     )
     vote_token: Mapped[str] = mapped_column(String, unique=True, nullable=False)
 
@@ -87,7 +129,7 @@ class ElectionVote(Base):
     vote: Mapped[str] = mapped_column(String(1), nullable=False)
     vote_token: Mapped[str] = mapped_column(String, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.now()
+        TZDateTime, nullable=False, default=datetime.now(timezone.utc)
     )
 
     # Relationships

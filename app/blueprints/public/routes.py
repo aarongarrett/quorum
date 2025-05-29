@@ -12,26 +12,32 @@ from flask import (
     url_for,
 )
 
-from ... import logic
 from ...database import get_db_session
+from ...services import (
+    checkin,
+    get_available_meetings,
+    get_election,
+    get_meeting,
+    vote_in_election,
+)
 
 public_bp = Blueprint("public", __name__, template_folder="templates")
 
 
-@public_bp.route("/")
-def home() -> FlaskResponse:
+@public_bp.route("/", methods=["GET"])
+def home_ui() -> FlaskResponse:
     db = next(get_db_session())
     cookies = dict(request.cookies)
     meeting_tokens = session.get("meeting_tokens", {})
     try:
-        meetings = logic.get_available_meetings(db, cookies, meeting_tokens)
+        meetings = get_available_meetings(db, cookies, meeting_tokens)
         return render_template("home.html", meetings=meetings)
     finally:
         db.close()
 
 
-@public_bp.route("/checkin/<int:meeting_id>", methods=["GET", "POST"])
-def checkin(
+@public_bp.route("/meetings/<int:meeting_id>/checkins", methods=["GET", "POST"])
+def checkin_ui(
     meeting_id: int,
 ) -> FlaskResponse:
     """Handle meeting check-in process
@@ -44,16 +50,12 @@ def checkin(
     """
     db = next(get_db_session())
     try:
-        if request.method == "POST" or "meeting_code" in request.args:
-            meeting_code = (
-                request.form.get("meeting_code")
-                if request.method == "POST"
-                else request.args.get("meeting_code")
-            )
+        if request.method == "POST":
+            meeting_code = request.form.get("meeting_code")
 
             if not meeting_code:
                 flash("Meeting code is required", "error")
-                return redirect(url_for("public.home"))
+                return redirect(url_for("public.home_ui"))
 
             # Check if user has already checked in to this meeting
             if f"meeting_{meeting_id}" in request.cookies or (
@@ -61,11 +63,11 @@ def checkin(
                 and meeting_id in session["checked_in_meetings"]
             ):
                 flash("You have already checked in to this meeting", "error")
-                return redirect(url_for("public.home"))
+                return redirect(url_for("public.home_ui"))
 
             # Process the check-in using the logic layer
             try:
-                vote_token = logic.checkin(db, meeting_id, meeting_code)
+                vote_token = checkin(db, meeting_id, meeting_code)
 
                 # Update session state
                 if "checked_in_meetings" not in session:
@@ -81,7 +83,7 @@ def checkin(
 
                 # Set a cookie to prevent duplicate check-ins
                 flash("You are checked in!", "success")
-                response = redirect(url_for("public.home"))
+                response = redirect(url_for("public.home_ui"))
                 response.set_cookie(
                     f"meeting_{meeting_id}",
                     "checked_in",
@@ -93,14 +95,14 @@ def checkin(
                 return response
             except ValueError as e:
                 flash(str(e), "error")
-                return redirect(url_for("public.home"))
+                return redirect(url_for("public.home_ui"))
 
         # For GET requests, show the check-in form
         # Get meeting details
-        meeting = logic.get_meeting(db, meeting_id)
+        meeting = get_meeting(db, meeting_id)
         if not meeting:
             flash(f"Invalid meeting ID ({meeting_id})", "error")
-            return redirect(url_for("public.home"))
+            return redirect(url_for("public.home_ui"))
 
         return render_template(
             "checkin.html",
@@ -110,13 +112,23 @@ def checkin(
         db.close()
 
 
-@public_bp.route("/vote/election/<int:election_id>", methods=["GET", "POST"])
-def vote(
+@public_bp.route("/meetings/<int:meeting_id>/auto_checkin")
+def auto_checkin(meeting_id):
+    return render_template("auto_checkin.html", meeting_id=meeting_id)
+
+
+@public_bp.route(
+    "/meetings/<int:meeting_id>/elections/<int:election_id>/votes",
+    methods=["GET", "POST"],
+)
+def vote_ui(
+    meeting_id: int,
     election_id: int,
 ) -> FlaskResponse:
     """Handle voting for a specific election
 
     Args:
+        meeting_id: The ID of the meeting to vote in
         election_id: The ID of the election to vote in
 
     Returns:
@@ -125,41 +137,39 @@ def vote(
     # Check if user has any checked-in meetings
     if "checked_in_meetings" not in session or not session["checked_in_meetings"]:
         flash("You have not checked in to any meetings", "error")
-        return redirect(url_for("public.home"))
+        return redirect(url_for("public.home_ui"))
 
     db = next(get_db_session())
     try:
         # Get the election with its meeting ID
-        election = logic.get_election(db, election_id)
-        if not election:
+        election = get_election(db, election_id)
+        if not election or election["meeting_id"] != meeting_id:
             flash("Invalid election", "error")
-            return redirect(url_for("public.home"))
-
-        meeting_id = election["meeting_id"]
+            return redirect(url_for("public.home_ui"))
 
         # Verify user is checked into this meeting
         if meeting_id not in session["checked_in_meetings"]:
             flash("You have not checked in to this meeting", "error")
-            return redirect(url_for("public.home"))
+            return redirect(url_for("public.home_ui"))
 
         # Get the token for this meeting
         vote_token = session.get("meeting_tokens", {}).get(str(meeting_id))
         if not vote_token:
             flash("You have not checked in to this meeting", "error")
-            return redirect(url_for("public.home"))
+            return redirect(url_for("public.home_ui"))
 
         if request.method == "POST":
             if "vote" not in request.form:
                 flash("Vote is required", "error")
-                return redirect(url_for("public.home", election_id=election_id))
+                return redirect(url_for("public.home_ui", election_id=election_id))
 
             vote = request.form["vote"]
             try:
-                logic.vote_in_election(db, meeting_id, election_id, vote_token, vote)
+                vote_in_election(db, meeting_id, election_id, vote_token, vote)
                 flash("Vote recorded successfully", "success")
             except ValueError as e:
                 flash(str(e), "error")
-            return redirect(url_for("public.home"))
+            return redirect(url_for("public.home_ui"))
 
         # For GET requests, show the voting form
         return render_template("vote.html", election_name=election["name"])

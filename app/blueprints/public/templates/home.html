@@ -123,6 +123,13 @@
     {% block extra_js %}
     {{ super() }}
     <script>
+        // at the top of your page, expose the URL pattern:
+        window.URL_TEMPLATES = {
+          vote: "{{ url_for('public.vote_ui', meeting_id=0, election_id=0) }}",
+          checkin: "{{ url_for('public.checkin_ui', meeting_id=0) }}"
+        };
+    </script>
+    <script>
         document.addEventListener('DOMContentLoaded', function() {
             const container = document.getElementById('meetings-container');
             const noMeetings = document.querySelector('.no-meetings');
@@ -192,52 +199,54 @@
             }
             
             function updateMeetingCard(card, meeting) {
+                const checkinUrl = window.URL_TEMPLATES.checkin.replace("/0", `/${meeting.id}`);
                 const startTime = new Date(meeting.start_time);
                 const endTime = new Date(meeting.end_time);
                 
                 let statusBadge = '';
-                if (meeting.checked_in) {
+                if (!meeting.checked_in) {
                     statusBadge = `
-                        <div class="status-badge status-checked-in">
-                            ✓ Checked In
-                        </div>
-                        <div class="election-list">
-                            ${meeting.elections && meeting.elections.length > 0 
-                                ? meeting.elections.map(election => `
-                                    <div class="election-item" data-election-id="${election.id}">
-                                        <h3 class="election-title">${escapeHtml(election.name)}</h3>
-                                        <div class="vote-status">
-                                            ${election.vote 
-                                                ? `
-                                                    <div class="status-message vote-cast">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                                        <span>You have voted: <strong>${escapeHtml(election.vote)}</strong></span>
-                                                    </div>
-                                                ` 
-                                                : `
-                                                    <a href="{{ url_for('public.vote', election_id=0) }}${election.id}" class="btn btn-primary">
-                                                        Vote Now
-                                                    </a>
-                                                `
-                                            }
-                                        </div>
-                                    </div>
-                                `).join('')
-                                : '<div class="no-elections"><p>No elections available for this meeting.</p></div>'
-                            }
-                        </div>
+                    <div class="status-badge status-not-checked-in">
+                        Not Checked In
+                    </div>
+                    <a href="${checkinUrl}" class="btn btn-primary">
+                        Check In
+                    </a>
                     `;
                 } else {
-                    statusBadge = `
-                        <div class="status-badge status-not-checked-in">
-                            Not Checked In
+                    // user _is_ checked in…
+                    const voteItems = (meeting.elections || []).map(election => {
+                    // take the template "/meeting/0/vote/0", strip trailing "/0/0",
+                    // then append the real IDs:
+                    const voteUrl = window.URL_TEMPLATES.vote
+                        .replace(/\/meetings\/0\/elections\/0\//,
+                                 `/meetings/${meetingId}/elections/${electionId}/`);
+                    return `
+                        <div class="election-item" data-election-id="${election.id}">
+                        <h3 class="election-title">${escapeHtml(election.name)}</h3>
+                        <div class="vote-status">
+                            ${election.vote
+                            ? `<div class="status-message vote-cast">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                    <span>You have voted: <strong>${escapeHtml(election.vote)}</strong></span>
+                               </div>`
+                            : `<a href="${voteUrl}" class="btn btn-primary">
+                                    Vote Now
+                               </a>`
+                            }
                         </div>
-                        <a href="{{ url_for('public.checkin', meeting_id=0) }}${meeting.id}" class="btn btn-primary">
-                            Check In
-                        </a>
+                        </div>
+                    `;
+                    }).join('');
+
+                    statusBadge = `
+                    <div class="status-badge status-checked-in">✓ Checked In</div>
+                    <div class="election-list">
+                        ${voteItems || '<div class="no-elections"><p>No elections available.</p></div>'}
+                    </div>
                     `;
                 }
-                
+
                 card.innerHTML = `
                     <div class="meeting-date">
                         ${startTime.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}

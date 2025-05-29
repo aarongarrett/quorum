@@ -1,11 +1,12 @@
 import importlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
 from sqlalchemy.orm import Session
 
-from app.logic import (
+from app.models import Checkin, Election, ElectionVote, Meeting
+from app.services import (
     checkin,
     create_election,
     create_meeting,
@@ -17,10 +18,9 @@ from app.logic import (
     get_meeting,
     get_user_votes,
     get_vote_counts,
-    is_meeting_available,
+    is_available,
     vote_in_election,
 )
-from app.models import Checkin, Election, ElectionVote, Meeting
 
 
 def decode_qr_png(img_buffer: BytesIO) -> str:
@@ -89,58 +89,58 @@ def test_generate_qr_code_empty_string():
     assert 'xmlns="http://www.w3.org/2000/svg"' in svg_content
 
 
-def test_meeting_available_at_start_time():
+def test_is_available_at_start_time():
     """Test that a meeting is available at its exact start time."""
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     start_time = current_time
     end_time = start_time + timedelta(hours=2)
-    assert is_meeting_available(start_time, end_time, current_time)
+    assert is_available(start_time, end_time, current_time)
 
 
-def test_meeting_available_shortly_before_start():
+def test_is_available_shortly_before_start():
     """Test that a meeting is available 5 minutes before start time."""
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     start_time = current_time + timedelta(minutes=5)
     end_time = start_time + timedelta(hours=2)
-    assert is_meeting_available(start_time, end_time, current_time)
+    assert is_available(start_time, end_time, current_time)
 
 
-def test_meeting_available_at_15_minute_window():
+def test_is_available_at_15_minute_window():
     """Test that a meeting is available exactly 15 minutes before start time."""
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     start_time = current_time + timedelta(minutes=15)
     end_time = start_time + timedelta(hours=2)
-    assert is_meeting_available(start_time, end_time, current_time)
+    assert is_available(start_time, end_time, current_time)
 
 
-def test_meeting_not_available_before_15_minute_window():
+def test_is_available_not_available_before_15_minute_window():
     """Test that a meeting is not available more than 15 minutes before start time."""
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     start_time = current_time + timedelta(minutes=16)
     end_time = start_time + timedelta(hours=2)
-    assert not is_meeting_available(start_time, end_time, current_time)
+    assert not is_available(start_time, end_time, current_time)
 
 
-def test_meeting_not_available_after_end():
+def test_is_available_not_available_after_end():
     """Test that a meeting is not available after its end time."""
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     start_time = current_time - timedelta(hours=2, minutes=1)
     end_time = start_time + timedelta(hours=2)
-    assert not is_meeting_available(start_time, end_time, current_time)
+    assert not is_available(start_time, end_time, current_time)
 
 
-def test_meeting_not_available_long_after_end():
+def test_is_available_not_available_long_after_end():
     """Test that a meeting is not available long after its end time."""
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     start_time = current_time - timedelta(hours=24)
     end_time = start_time + timedelta(hours=2)
-    assert not is_meeting_available(start_time, end_time, current_time)
+    assert not is_available(start_time, end_time, current_time)
 
 
 def test_create_meeting_success(db_connection: Session):
     """Test successfully creating a new meeting."""
     # Test data
-    start_time = datetime.now() + timedelta(hours=1)
+    start_time = datetime.now(timezone.utc) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=1)
 
     # Call the function
@@ -164,16 +164,18 @@ def test_create_meeting_success(db_connection: Session):
 def test_create_meeting_duplicate_code_handling(db_connection: Session, monkeypatch):
     """Test that the function handles duplicate meeting codes by retrying."""
 
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     end_time = start_time + timedelta(hours=1)
 
     # Mock the make_pronounceable function to return duplicate codes first
     codes = ["DUPLICAT", "UNIQUECODE"]
 
-    def mock_make_pronounceable(length):
+    def mock_make_pronounceable(length=8):
         return codes.pop(0)
 
-    monkeypatch.setattr("app.logic.make_pronounceable", mock_make_pronounceable)
+    import app.services.meetings as meetings_module
+
+    monkeypatch.setattr(meetings_module, "make_pronounceable", mock_make_pronounceable)
 
     # Create first meeting with the duplicate code
     meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
@@ -194,7 +196,7 @@ def test_create_meeting_duplicate_code_handling(db_connection: Session, monkeypa
 
 def test_create_meeting_invalid_times(db_connection: Session):
     """Test that end time must be after start time."""
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     start_time = now + timedelta(hours=1)
     end_time = start_time - timedelta(minutes=30)  # End before start
 
@@ -216,8 +218,8 @@ def test_delete_meeting_success(db_connection: Session):
     """Test successfully deleting a meeting with all its associated data."""
     # Create a new meeting
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -239,8 +241,16 @@ def test_delete_meeting_success(db_connection: Session):
 
     # Add some check-ins
     checkins = [
-        Checkin(meeting_id=meeting.id, vote_token="TOKEN1", timestamp=datetime.now()),
-        Checkin(meeting_id=meeting.id, vote_token="TOKEN2", timestamp=datetime.now()),
+        Checkin(
+            meeting_id=meeting.id,
+            vote_token="TOKEN1",
+            timestamp=datetime.now(timezone.utc),
+        ),
+        Checkin(
+            meeting_id=meeting.id,
+            vote_token="TOKEN2",
+            timestamp=datetime.now(timezone.utc),
+        ),
     ]
     db_connection.add_all(checkins)
     db_connection.commit()
@@ -283,8 +293,8 @@ def test_delete_meeting_without_elections(db_connection: Session):
     """Test deleting a meeting that has no elections."""
     # Create a new meeting with no elections
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -292,7 +302,9 @@ def test_delete_meeting_without_elections(db_connection: Session):
 
     # Add a check-in to verify it gets deleted too
     checkin = Checkin(
-        meeting_id=meeting.id, vote_token="TESTTOKEN", timestamp=datetime.now()
+        meeting_id=meeting.id,
+        vote_token="TESTTOKEN",
+        timestamp=datetime.now(timezone.utc),
     )
     db_connection.add(checkin)
     db_connection.commit()
@@ -309,8 +321,8 @@ def test_delete_meeting_without_elections(db_connection: Session):
 def test_create_election_success(db_connection: Session):
     """Test successful creation of an election."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -347,8 +359,8 @@ def test_create_election_nonexistent_meeting(db_connection: Session):
 def test_create_election_empty_name(db_connection: Session):
     """Test creating an election with an empty name."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -361,8 +373,8 @@ def test_create_election_empty_name(db_connection: Session):
 def test_create_election_duplicate_name_same_meeting(db_connection: Session):
     """Test creating an election with a duplicate name in the same meeting."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -383,13 +395,13 @@ def test_create_election_duplicate_name_same_meeting(db_connection: Session):
 def test_create_election_same_name_different_meeting(db_connection: Session):
     """Test creating elections with the same name in different meetings."""
     meeting1 = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE1",
     )
     meeting2 = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE2",
     )
     db_connection.add_all([meeting1, meeting2])
@@ -414,8 +426,8 @@ def test_create_election_same_name_different_meeting(db_connection: Session):
 def test_delete_election_success(db_connection: Session):
     """Test successful deletion of an election."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -449,8 +461,8 @@ def test_delete_nonexistent_election(db_connection: Session):
     """Test deleting an election that doesn't exist."""
     non_existent_id = 999999
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -468,8 +480,8 @@ def test_checkin_success(db_connection: Session):
     """Test successful check-in to a meeting."""
     meeting_code = "TESTCODE"
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code=meeting_code,
     )
     db_connection.add(meeting)
@@ -498,8 +510,8 @@ def test_checkin_invalid_meeting_id(db_connection: Session):
 def test_checkin_invalid_meeting_code(db_connection: Session):
     """Test check-in with an incorrect meeting code."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -514,8 +526,8 @@ def test_checkin_meeting_not_available(db_connection: Session):
     """Test check-in when the meeting is not available (already ended)."""
     meeting_code = "TESTCODE"
     meeting = Meeting(
-        start_time=datetime.now() - timedelta(hours=2),
-        end_time=datetime.now() - timedelta(minutes=1),
+        start_time=datetime.now(timezone.utc) - timedelta(hours=2),
+        end_time=datetime.now(timezone.utc) - timedelta(minutes=1),
         meeting_code=meeting_code,
     )
     db_connection.add(meeting)
@@ -529,8 +541,8 @@ def test_checkin_duplicate_token(db_connection: Session):
     """Test that check-in generates a unique token even if there's a collision."""
     meeting_code = "TESTCODE"
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(minutes=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(minutes=2),
         meeting_code=meeting_code,
     )
     db_connection.add(meeting)
@@ -538,7 +550,11 @@ def test_checkin_duplicate_token(db_connection: Session):
 
     first_token = "TOKEN1"
     db_connection.add(
-        Checkin(meeting_id=meeting.id, vote_token=first_token, timestamp=datetime.now())
+        Checkin(
+            meeting_id=meeting.id,
+            vote_token=first_token,
+            timestamp=datetime.now(timezone.utc),
+        )
     )
     db_connection.commit()
 
@@ -562,8 +578,8 @@ def test_checkin_duplicate_token(db_connection: Session):
 def test_get_elections_success(db_connection: Session):
     """Test retrieving the elections for a meeting."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -604,8 +620,8 @@ def test_get_elections_success(db_connection: Session):
 def test_get_elections_no_elections(db_connection: Session):
     """Test retrieving elections for a meeting with no elections."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -626,8 +642,8 @@ def test_get_elections_nonexistent_meeting(db_connection: Session):
 def test_get_meeting_success(db_connection: Session):
     """Test retrieving a specific meeting."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -651,7 +667,7 @@ def test_get_meeting_nonexistent_meeting(db_connection: Session):
 def test_get_election_success(db_connection: Session):
     """Test successfully retrieving an election with votes."""
     # Create a meeting
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     end_time = start_time + timedelta(hours=2)
     meeting = Meeting(
         start_time=start_time,
@@ -671,7 +687,7 @@ def test_get_election_success(db_connection: Session):
     checkin = Checkin(
         meeting_id=meeting.id,
         vote_token=vote_token,
-        timestamp=datetime.now(),
+        timestamp=datetime.now(timezone.utc),
     )
     db_connection.add(checkin)
     db_connection.commit()
@@ -701,7 +717,7 @@ def test_get_election_success(db_connection: Session):
 def test_get_election_no_votes(db_connection: Session):
     """Test retrieving an election with no votes."""
     # Create a meeting
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     end_time = start_time + timedelta(hours=2)
     meeting = Meeting(
         start_time=start_time,
@@ -741,7 +757,7 @@ def test_get_nonexistent_election(db_connection: Session):
 def test_get_election_with_multiple_votes(db_connection: Session):
     """Test retrieving an election with multiple votes."""
     # Create a meeting
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     end_time = start_time + timedelta(hours=2)
     meeting = Meeting(
         start_time=start_time,
@@ -764,7 +780,7 @@ def test_get_election_with_multiple_votes(db_connection: Session):
         checkin = Checkin(
             meeting_id=meeting.id,
             vote_token=vote_token,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
         )
         db_connection.add(checkin)
         db_connection.flush()  # Flush to get the checkin ID
@@ -802,8 +818,8 @@ def test_get_user_votes_success(db_connection: Session):
     """Test retrieving votes from a specific meeting."""
     # Create a new meeting
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -819,10 +835,14 @@ def test_get_user_votes_success(db_connection: Session):
     db_connection.add_all(
         [
             Checkin(
-                meeting_id=meeting.id, vote_token="TOKEN1", timestamp=datetime.now()
+                meeting_id=meeting.id,
+                vote_token="TOKEN1",
+                timestamp=datetime.now(timezone.utc),
             ),
             Checkin(
-                meeting_id=meeting.id, vote_token="TOKEN2", timestamp=datetime.now()
+                meeting_id=meeting.id,
+                vote_token="TOKEN2",
+                timestamp=datetime.now(timezone.utc),
             ),
         ]
     )
@@ -859,8 +879,8 @@ def test_get_user_votes_nonexistent_vote_token(db_connection: Session):
     """Test retrieving votes with a non-existent token."""
     # Create a new meeting
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -876,10 +896,14 @@ def test_get_user_votes_nonexistent_vote_token(db_connection: Session):
     db_connection.add_all(
         [
             Checkin(
-                meeting_id=meeting.id, vote_token="TOKEN1", timestamp=datetime.now()
+                meeting_id=meeting.id,
+                vote_token="TOKEN1",
+                timestamp=datetime.now(timezone.utc),
             ),
             Checkin(
-                meeting_id=meeting.id, vote_token="TOKEN2", timestamp=datetime.now()
+                meeting_id=meeting.id,
+                vote_token="TOKEN2",
+                timestamp=datetime.now(timezone.utc),
             ),
         ]
     )
@@ -902,8 +926,8 @@ def test_get_user_votes_nonexistent_vote_token(db_connection: Session):
 def test_get_vote_counts(db_connection: Session):
     """Test getting vote counts."""
     meeting = Meeting(
-        start_time=datetime.now(),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc) + timedelta(hours=2),
         meeting_code="TESTCODE",
     )
     db_connection.add(meeting)
@@ -938,8 +962,8 @@ def test_get_vote_counts(db_connection: Session):
 def test_vote_in_election_success(db_connection: Session):
     """Test successfully voting in an election."""
     # Create a meeting
-    start_time = datetime.now() - timedelta(minutes=10)
-    end_time = datetime.now() + timedelta(hours=1)
+    start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+    end_time = datetime.now(timezone.utc) + timedelta(hours=1)
     meeting = Meeting(
         start_time=start_time,
         end_time=end_time,
@@ -958,7 +982,7 @@ def test_vote_in_election_success(db_connection: Session):
     checkin = Checkin(
         meeting_id=meeting.id,
         vote_token=vote_token,
-        timestamp=datetime.now(),
+        timestamp=datetime.now(timezone.utc),
     )
     db_connection.add(checkin)
     db_connection.commit()
@@ -987,8 +1011,8 @@ def test_vote_in_election_success(db_connection: Session):
 def test_vote_in_election_invalid_election(db_connection: Session):
     """Test voting with an invalid election ID."""
     # Create a meeting
-    start_time = datetime.now() - timedelta(minutes=10)
-    end_time = datetime.now() + timedelta(hours=1)
+    start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+    end_time = datetime.now(timezone.utc) + timedelta(hours=1)
     meeting = Meeting(
         start_time=start_time,
         end_time=end_time,
@@ -1002,7 +1026,7 @@ def test_vote_in_election_invalid_election(db_connection: Session):
     checkin = Checkin(
         meeting_id=meeting.id,
         vote_token=vote_token,
-        timestamp=datetime.now(),
+        timestamp=datetime.now(timezone.utc),
     )
     db_connection.add(checkin)
     db_connection.commit()
@@ -1020,8 +1044,8 @@ def test_vote_in_election_invalid_election(db_connection: Session):
 def test_vote_in_election_already_voted(db_connection: Session):
     """Test that a user cannot vote twice in the same election."""
     # Create a meeting
-    start_time = datetime.now() - timedelta(minutes=10)
-    end_time = datetime.now() + timedelta(hours=1)
+    start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+    end_time = datetime.now(timezone.utc) + timedelta(hours=1)
     meeting = Meeting(
         start_time=start_time,
         end_time=end_time,
@@ -1040,7 +1064,7 @@ def test_vote_in_election_already_voted(db_connection: Session):
     checkin = Checkin(
         meeting_id=meeting.id,
         vote_token=vote_token,
-        timestamp=datetime.now(),
+        timestamp=datetime.now(timezone.utc),
     )
     db_connection.add(checkin)
     db_connection.commit()
@@ -1068,8 +1092,8 @@ def test_vote_in_election_already_voted(db_connection: Session):
 def test_vote_in_election_invalid_token(db_connection: Session):
     """Test voting with an invalid token."""
     # Create a meeting
-    start_time = datetime.now() - timedelta(minutes=10)
-    end_time = datetime.now() + timedelta(hours=1)
+    start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+    end_time = datetime.now(timezone.utc) + timedelta(hours=1)
     meeting = Meeting(
         start_time=start_time,
         end_time=end_time,
@@ -1097,8 +1121,8 @@ def test_vote_in_election_invalid_token(db_connection: Session):
 def test_vote_in_election_meeting_ended(db_connection: Session):
     """Test that voting is not allowed after the meeting has ended."""
     # Create a meeting that has already ended
-    start_time = datetime.now() - timedelta(hours=2)
-    end_time = datetime.now() - timedelta(hours=1)
+    start_time = datetime.now(timezone.utc) - timedelta(hours=2)
+    end_time = datetime.now(timezone.utc) - timedelta(hours=1)
     meeting = Meeting(
         start_time=start_time,
         end_time=end_time,
@@ -1117,7 +1141,7 @@ def test_vote_in_election_meeting_ended(db_connection: Session):
     checkin = Checkin(
         meeting_id=meeting.id,
         vote_token=vote_token,
-        timestamp=datetime.now(),
+        timestamp=datetime.now(timezone.utc),
     )
     db_connection.add(checkin)
     db_connection.commit()

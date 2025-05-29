@@ -1,6 +1,6 @@
 import io
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Union
 
 import qrcode
@@ -11,39 +11,7 @@ from sqlalchemy.orm import Session
 from app.models import Checkin, Election, ElectionVote, Meeting
 
 
-def is_meeting_available(
-    start_time: Union[datetime, str],
-    end_time: Union[datetime, str],
-    current_time: Optional[datetime] = None,
-) -> bool:
-    """Check if a meeting is currently available for check-in.
-
-    Args:
-        start_time: Meeting start time (datetime or ISO format string)
-        end_time: Meeting end time (datetime or ISO format string)
-        current_time: Optional current time for testing (defaults to now)
-
-    Returns:
-        bool: True if meeting is available for check-in
-    """
-    if current_time is None:
-        current_time = datetime.now()
-
-    # Convert string times to datetime objects if needed
-    if isinstance(start_time, str):
-        start_time = datetime.fromisoformat(start_time)
-    if isinstance(end_time, str):
-        end_time = datetime.fromisoformat(end_time)
-
-    # Allow check-in 15 minutes before and 15 minutes after start
-    checkin_start = start_time - timedelta(minutes=15)
-
-    # Meeting is available if current time is within the check-in window
-    # and before the meeting end time
-    return checkin_start <= current_time <= end_time
-
-
-def make_pronounceable(length: int = 6) -> str:
+def make_pronounceable(length: int = 8) -> str:
     """Generate a pronounceable token of the specified length
 
     The token alternates between consonants and vowels to make it easier to read and say.
@@ -62,7 +30,88 @@ def make_pronounceable(length: int = 6) -> str:
     return "".join(token)
 
 
-def get_meetings(db: Session) -> list[dict[str, Any]]:
+def to_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        raise ValueError("All times must be timezone-aware (include tzinfo)")
+    # Convert any zone into UTC
+    return dt.astimezone(timezone.utc)
+
+
+def is_meeting_available(
+    start_time: Union[datetime, str],
+    end_time: Union[datetime, str],
+    current_time: Optional[datetime] = None,
+) -> bool:
+    """Check if a meeting is currently available for check-in.
+
+    Args:
+        start_time: Meeting start time (datetime or ISO format string)
+        end_time: Meeting end time (datetime or ISO format string)
+        current_time: Optional current time for testing (defaults to now)
+
+    Returns:
+        bool: True if meeting is available for check-in
+    """
+    if current_time is None:
+        current_time = datetime.now(timezone.utc)
+
+    current_utc = to_utc(current_time)
+
+    # Convert string times to datetime objects if needed
+    if isinstance(start_time, str):
+        start_time = datetime.fromisoformat(start_time)
+    if isinstance(end_time, str):
+        end_time = datetime.fromisoformat(end_time)
+
+    start_utc = to_utc(start_time)
+    end_utc = to_utc(end_time)
+
+    # Allow check-in 15 minutes before and 15 minutes after start
+    checkin_utc = start_utc - timedelta(minutes=15)
+
+    # Meeting is available if current time is within the check-in window
+    # and before the meeting end time
+    return checkin_utc <= current_utc <= end_utc
+
+
+def get_meeting(
+    db: Session, meeting_id: int, time_zone: Optional[Any] = None
+) -> Optional[dict[str, Any]]:
+    """Retrieve a specific meeting.
+
+    Args:
+        db: SQLAlchemy session
+        meeting_id: ID of the meeting to retrieve
+
+    Returns:
+        dict[str, Any]: a dictionary of the meeting/election information
+    """
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+
+    if not meeting:
+        return None
+
+    if time_zone is None:
+        time_zone = timezone.utc
+
+    result = {
+        "id": meeting.id,
+        "start_time": meeting.start_time.astimezone(time_zone),
+        "end_time": meeting.end_time.astimezone(time_zone),
+        "meeting_code": meeting.meeting_code,
+        "checkins": get_checkin_count(db, meeting.id),
+        "elections": [],
+    }
+
+    # Get elections for this meeting
+    elections = get_elections(db, meeting.id)
+    for election_id, name in elections.items():
+        result["elections"].append(get_election(db, election_id))
+
+    return result
+
+
+def get_meetings(db: Session, time_zone: Optional[Any] = None) -> list[dict[str, Any]]:
     """Retrieve all meetings with their details.
 
     Args:
@@ -73,13 +122,16 @@ def get_meetings(db: Session) -> list[dict[str, Any]]:
     """
     meetings = db.query(Meeting).order_by(Meeting.start_time.desc()).all()
 
+    if time_zone is None:
+        time_zone = timezone.utc
+
     result = []
     for meeting in meetings:
         result.append(
             {
                 "id": meeting.id,
-                "start_time": meeting.start_time,
-                "end_time": meeting.end_time,
+                "start_time": meeting.start_time.astimezone(time_zone),
+                "end_time": meeting.end_time.astimezone(time_zone),
                 "meeting_code": meeting.meeting_code,
             }
         )
@@ -88,7 +140,10 @@ def get_meetings(db: Session) -> list[dict[str, Any]]:
 
 
 def get_available_meetings(
-    db: Session, cookies: dict[str, str], meeting_tokens: dict[str, str]
+    db: Session,
+    cookies: dict[str, str],
+    meeting_tokens: dict[str, str],
+    time_zone: Optional[Any] = None,
 ) -> list[dict[str, Any]]:
     """Retrieve all available meetings with their check-in status.
 
@@ -100,7 +155,9 @@ def get_available_meetings(
         list[dict[str, Any]]: List of meetings where each dictionary contains
             the meeting information and the election information for the current user
     """
-    current_time = datetime.now()
+    if time_zone is None:
+        time_zone = timezone.utc
+    current_time = datetime.now(timezone.utc)
 
     # Query all meetings ordered by start_time descending
     meetings = db.query(Meeting).order_by(Meeting.start_time.desc()).all()
@@ -110,8 +167,8 @@ def get_available_meetings(
     for meeting in meetings:
         if is_meeting_available(meeting.start_time, meeting.end_time, current_time):
             meeting_id = meeting.id
-            start_time = meeting.start_time.isoformat()
-            end_time = meeting.end_time.isoformat()
+            start_time = meeting.start_time.astimezone(time_zone).isoformat()
+            end_time = meeting.end_time.astimezone(time_zone).isoformat()
             checked_in = cookies.get(f"meeting_{meeting_id}") is not None
             meeting_info = {
                 "id": meeting_id,
@@ -157,18 +214,17 @@ def create_meeting(
         IntegrityError: If there's an issue with the database operation
     """
 
-    def generate_meeting_code() -> str:
-        """Generate a pronounceable meeting code."""
-        return make_pronounceable(8)
+    start_utc = to_utc(start_time)
+    end_utc = to_utc(end_time)
 
-    if end_time <= start_time:
+    if end_utc <= start_utc:
         raise ValueError("End time must be after start time")
 
     # Try to create a meeting with a unique code (retry once if code exists)
     for _ in range(2):
-        meeting_code = generate_meeting_code()
+        meeting_code = make_pronounceable()
         meeting = Meeting(
-            start_time=start_time, end_time=end_time, meeting_code=meeting_code
+            start_time=start_utc, end_time=end_utc, meeting_code=meeting_code
         )
 
         try:
@@ -327,11 +383,13 @@ def checkin(db: Session, meeting_id: int, meeting_code: str) -> str:
             raise ValueError("Meeting is not available")
 
         # Generate a unique vote token
-        vote_token = make_pronounceable(8)
+        vote_token = make_pronounceable()
 
         # Create a new check-in record
         checkin = Checkin(
-            meeting_id=meeting_id, vote_token=vote_token, timestamp=datetime.now()
+            meeting_id=meeting_id,
+            vote_token=vote_token,
+            timestamp=datetime.now(timezone.utc),
         )
 
         db.add(checkin)
@@ -524,38 +582,6 @@ def get_vote_counts(db: Session, election_id: int) -> dict[str, int]:
     for vote, count in vote_counts:
         if vote in result:
             result[vote] = count
-
-    return result
-
-
-def get_meeting(db: Session, meeting_id: int) -> Optional[dict[str, Any]]:
-    """Retrieve a specific meeting.
-
-    Args:
-        db: SQLAlchemy session
-        meeting_id: ID of the meeting to retrieve
-
-    Returns:
-        dict[str, Any]: a dictionary of the meeting/election information
-    """
-    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
-
-    if not meeting:
-        return None
-
-    result = {
-        "id": meeting.id,
-        "start_time": meeting.start_time,
-        "end_time": meeting.end_time,
-        "meeting_code": meeting.meeting_code,
-        "checkins": get_checkin_count(db, meeting.id),
-        "elections": [],
-    }
-
-    # Get elections for this meeting
-    elections = get_elections(db, meeting.id)
-    for election_id, name in elections.items():
-        result["elections"].append(get_election(db, election_id))
 
     return result
 

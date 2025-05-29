@@ -1,11 +1,7 @@
 import pytest
 
 from app import create_app
-from app.config import config as app_config
 from app.database import configure_database, get_db_session
-
-# Before anything else, spin up in-memory DB
-configure_database(app_config["testing"].DATABASE_URL)
 
 
 @pytest.fixture

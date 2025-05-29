@@ -5,16 +5,23 @@ import time
 
 from flask import Blueprint
 from flask import Response as FlaskResponse
-from flask import jsonify, request, session
+from flask import current_app, jsonify, request, session
 
-from ... import logic
 from ...database import get_db_session
+from ...services import (
+    checkin,
+    get_available_meetings,
+    get_checkin_count,
+    get_election,
+    get_elections,
+    get_meetings,
+)
 
 api_bp = Blueprint("api", __name__, template_folder="templates")
 
 
-@api_bp.route("/admin/updates")
-def admin_updates():
+@api_bp.route("/admin/meetings/stream")
+def admin_stream_api():
     if not session.get("is_admin"):
         return jsonify({"error": "Unauthorized"}), 403
 
@@ -24,15 +31,15 @@ def admin_updates():
         try:
             while True:
                 result = {}
-                for meeting in logic.get_meetings(db):
+                for meeting in get_meetings(db, current_app.config["TZ"]):
                     result[str(meeting["id"])] = {
-                        "checkins": logic.get_checkin_count(db, meeting["id"]),
+                        "checkins": get_checkin_count(db, meeting["id"]),
                         "elections": {},
                     }
-                    for election_id in logic.get_elections(db, meeting["id"]):
+                    for election_id in get_elections(db, meeting["id"]):
                         result[str(meeting["id"])]["elections"][
                             str(election_id)
-                        ] = logic.get_election(db, election_id)
+                        ] = get_election(db, election_id)
 
                 data = json.dumps(result)
 
@@ -40,8 +47,7 @@ def admin_updates():
                 time.sleep(5)  # Update interval
 
         except Exception as e:
-            print(f"Error in admin stream: {e}")
-            yield "event: error\ndata: An error occurred\n\n"
+            yield f"event: error\ndata: An error occurred {e}\n\n"
             time.sleep(5)
 
     return FlaskResponse(
@@ -54,8 +60,8 @@ def admin_updates():
     )
 
 
-@api_bp.route("/updates")
-def meeting_stream():
+@api_bp.route("/meetings/stream")
+def user_stream_api():
     db = next(get_db_session())
     cookies = dict(request.cookies)
     meeting_tokens = session.get("meeting_tokens", {})
@@ -63,7 +69,9 @@ def meeting_stream():
     def event_stream():
         while True:
             try:
-                meetings = logic.get_available_meetings(db, cookies, meeting_tokens)
+                meetings = get_available_meetings(
+                    db, cookies, meeting_tokens, current_app.config["TZ"]
+                )
 
                 # Format as SSE data
                 data = json.dumps(meetings)
@@ -72,8 +80,7 @@ def meeting_stream():
                 # Wait before next update
                 time.sleep(10)
             except Exception as e:
-                print(f"Error in event stream: {e}")
-                yield "event: error\ndata: An error occurred\n\n"
+                yield f"event: error\ndata: An error occurred {e}\n\n"
                 time.sleep(5)  # Wait before retrying
 
     return FlaskResponse(
@@ -86,15 +93,17 @@ def meeting_stream():
     )
 
 
-@api_bp.route("/checkin/<int:meeting_id>/<meeting_code>", methods=["POST"])
-def checkin(meeting_id: int, meeting_code: str) -> tuple[FlaskResponse, int]:
+@api_bp.route("/meetings/<int:meeting_id>/checkins", methods=["POST"])
+def checkin_api(meeting_id: int) -> tuple[FlaskResponse, int]:
     """API endpoint to check in to a meeting"""
+    payload = request.get_json()
+    meeting_code = payload["meeting_code"]
     if not meeting_code:
         return jsonify({"error": "Meeting code is required"}), 400
 
     db = next(get_db_session())
     try:
-        token = logic.checkin(db, meeting_id, meeting_code)
+        token = checkin(db, meeting_id, meeting_code)
         return jsonify({"token": token}), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404

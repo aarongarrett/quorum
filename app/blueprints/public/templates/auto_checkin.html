@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Checking You In…</title>
+  </head>
+  <body>
+    <p>Checking you in, please wait…</p>
+    <form
+      id="checkinForm"
+      action="{{ url_for('public.checkin_ui', meeting_id=meeting_id) }}"
+      method="POST"
+      style="display:none"
+    >
+      <input name="code" id="checkinCode" />
+    </form>
+    <script>
+      // Pull the code out of the fragment
+      const token = decodeURIComponent(location.hash.slice(1));
+      if (!token) {
+        document.body.innerHTML = "<p>Error: no code found.</p>";
+      } else {
+        // put it in the hidden field
+        document.getElementById("checkinCode").value = token;
+        // auto-submit
+        document.getElementById("checkinForm").submit();
+      }
+    </script>
+  </body>
+</html>

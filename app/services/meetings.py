@@ -1,25 +1,14 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, NoResultFound
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.models import Checkin, Meeting
-from app.services.elections import get_election, get_elections, get_user_votes
-from app.services.utils import is_available, make_pronounceable, to_utc
-
-
-def get_checkin_count(db: Session, meeting_id: int) -> int:
-    """Get check-in count for the meeting_id.
-
-    Args:
-        db: SQLAlchemy session
-        meeting_id: the meeting id
-
-    Returns:
-        int: the check-in count
-    """
-    return db.query(Checkin).filter(Checkin.meeting_id == meeting_id).count()
+from app.models import Checkin, ElectionVote, Meeting
+from app.services.elections import get_election, get_elections
+from app.services.utils import make_pronounceable, to_utc
 
 
 def get_meeting(
@@ -47,7 +36,7 @@ def get_meeting(
         "start_time": meeting.start_time.astimezone(time_zone),
         "end_time": meeting.end_time.astimezone(time_zone),
         "meeting_code": meeting.meeting_code,
-        "checkins": get_checkin_count(db, meeting.id),
+        "checkins": db.query(Checkin).filter(Checkin.meeting_id == meeting_id).count(),
         "elections": [],
     }
 
@@ -57,92 +46,6 @@ def get_meeting(
         result["elections"].append(get_election(db, election_id))
 
     return result
-
-
-def get_meetings(db: Session, time_zone: Optional[Any] = None) -> list[dict[str, Any]]:
-    """Retrieve all meetings with their details.
-
-    Args:
-        db: SQLAlchemy session
-
-    Returns:
-        list[dict[str, Any]]: List of meetings with their details
-    """
-    meetings = db.query(Meeting).order_by(Meeting.start_time.desc()).all()
-
-    if time_zone is None:
-        time_zone = timezone.utc
-
-    result = []
-    for meeting in meetings:
-        result.append(
-            {
-                "id": meeting.id,
-                "start_time": meeting.start_time.astimezone(time_zone),
-                "end_time": meeting.end_time.astimezone(time_zone),
-                "meeting_code": meeting.meeting_code,
-            }
-        )
-
-    return result
-
-
-def get_available_meetings(
-    db: Session,
-    cookies: dict[str, str],
-    meeting_tokens: dict[str, str],
-    time_zone: Optional[Any] = None,
-) -> list[dict[str, Any]]:
-    """Retrieve all available meetings with their check-in status.
-
-    Args:
-        db: SQLAlchemy session
-        cookies: a dictionary of user cookies
-
-    Returns:
-        list[dict[str, Any]]: List of meetings where each dictionary contains
-            the meeting information and the election information for the current user
-    """
-    if time_zone is None:
-        time_zone = timezone.utc
-    current_time = datetime.now(timezone.utc)
-
-    # Query all meetings ordered by start_time descending
-    meetings = db.query(Meeting).order_by(Meeting.start_time.desc()).all()
-
-    # Filter meetings that are currently available
-    available_meetings = []
-    for meeting in meetings:
-        if is_available(meeting.start_time, meeting.end_time, current_time):
-            meeting_id = meeting.id
-            start_time = meeting.start_time.astimezone(time_zone).isoformat()
-            end_time = meeting.end_time.astimezone(time_zone).isoformat()
-            checked_in = cookies.get(f"meeting_{meeting_id}") is not None
-            meeting_info = {
-                "id": meeting_id,
-                "start_time": start_time,
-                "end_time": end_time,
-                "checked_in": checked_in,
-                "elections": [],
-            }
-            if checked_in:
-                # Fetch elections and user's votes
-                meeting = get_meeting(db, meeting_id)
-                vote_token = meeting_tokens.get(str(meeting_id))
-                if vote_token and meeting and meeting["end_time"] >= current_time:
-                    elections = get_elections(db, meeting_id)
-                    meeting_votes = get_user_votes(db, meeting_id, vote_token)
-                    meeting_info["elections"] = [
-                        {
-                            "id": e_id,
-                            "name": e_name,
-                            "vote": meeting_votes.get(e_id, {}).get("vote", ""),
-                        }
-                        for e_id, e_name in elections.items()
-                    ]
-            available_meetings.append(meeting_info)
-
-    return available_meetings
 
 
 def create_meeting(
@@ -217,3 +120,146 @@ def delete_meeting(db: Session, meeting_id: int) -> bool:
     except Exception:
         db.rollback()
         raise
+
+
+def get_all_meetings(db: Session, tz: ZoneInfo) -> list[dict]:
+    """
+    Returns a list of meetings, each as a dict:
+    {
+      "id": int,
+      "start_time": "ISO8601 string in tz",
+      "end_time":   "ISO8601 string in tz",
+      "meeting_code": str,
+      "checkins": int,
+      "elections": [
+        {
+          "id": int,
+          "name": str,
+          "total_votes": int,
+          "votes": { "A": int, ..., "H": int }
+        }, ...
+      ]
+    }
+    """
+
+    def to_local_iso(dt: datetime, tz: ZoneInfo) -> str:
+        return dt.astimezone(tz).isoformat()
+
+    # 1) fetch meetings + elections
+    meetings = (
+        db.query(Meeting)
+        .options(joinedload(Meeting.elections))
+        .order_by(Meeting.start_time.desc())
+        .all()
+    )
+
+    # 2) bulk‑compute checkin counts
+    checkin_counts = {
+        mid: cnt
+        for mid, cnt in db.query(Checkin.meeting_id, func.count())
+        .group_by(Checkin.meeting_id)
+        .all()
+    }
+
+    # 3) bulk‑compute vote counts
+    raw_votes = (
+        db.query(ElectionVote.election_id, ElectionVote.vote, func.count().label("cnt"))
+        .group_by(ElectionVote.election_id, ElectionVote.vote)
+        .all()
+    )
+    vote_counts: dict[int, dict[str, int]] = {}
+    for eid, vote, cnt in raw_votes:
+        vote_counts.setdefault(eid, {}).update({vote: cnt})
+
+    result = []
+    for m in meetings:
+        elects = []
+        for e in m.elections:
+            vc = vote_counts.get(e.id, {})
+            elects.append(
+                {
+                    "id": e.id,
+                    "name": e.name,
+                    "total_votes": sum(vc.values()),
+                    "votes": {opt: vc.get(opt, 0) for opt in "ABCDEFGH"},
+                }
+            )
+        result.append(
+            {
+                "id": m.id,
+                "start_time": to_local_iso(m.start_time, tz),
+                "end_time": to_local_iso(m.end_time, tz),
+                "meeting_code": m.meeting_code,
+                "checkins": checkin_counts.get(m.id, 0),
+                "elections": elects,
+            }
+        )
+    return result
+
+
+def get_available_meetings(
+    db: Session, vote_tokens: dict[int, str], tz: ZoneInfo
+) -> list[dict]:
+    """Return only meetings that are currently active (start-15m → end).
+
+    Each meeting is of the following form:
+    {
+      "id": int,
+      "start_time": "ISO8601 string in tz",
+      "end_time":   "ISO8601 string in tz",
+      "meeting_code": str,
+      "checked_in": bool,
+      "elections": [
+        {
+          "id": int,
+          "name": str,
+          "vote": str | None
+        }, ...
+      ]
+    }
+    """
+    now_utc = datetime.now(timezone.utc)
+    window_end = now_utc + timedelta(minutes=15)
+
+    # 1) Bulk fetch only the “active” meetings + their elections
+    active = (
+        db.query(Meeting)
+        .options(joinedload(Meeting.elections))
+        .filter(Meeting.start_time <= window_end, Meeting.end_time >= now_utc)
+        .order_by(Meeting.start_time.desc())
+        .all()
+    )
+
+    # 2) Bulk‐fetch all votes for those tokens in one go
+    #    (So we don’t do one query per election per meeting)
+    rows = (
+        db.query(ElectionVote.election_id, ElectionVote.vote, ElectionVote.vote_token)
+        .filter(ElectionVote.vote_token.in_(vote_tokens.values()))
+        .all()
+    )
+    # pivot into: { (election_id, vote_token) → vote }
+    vote_map = {(eid, token): v for eid, v, token in rows}
+
+    result = []
+    for m in active:
+        token = vote_tokens.get(m.id)
+        checked_in = token is not None
+
+        elect_list = []
+        for e in m.elections:
+            user_vote = vote_map.get((e.id, token)) if checked_in else None
+            elect_list.append({"id": e.id, "name": e.name, "vote": user_vote})
+
+        result.append(
+            {
+                "id": m.id,
+                # convert into the local zone & ISO‑format for JSON
+                "start_time": m.start_time.astimezone(tz).isoformat(),
+                "end_time": m.end_time.astimezone(tz).isoformat(),
+                "meeting_code": m.meeting_code,
+                "checked_in": checked_in,
+                "elections": elect_list,
+            }
+        )
+
+    return result

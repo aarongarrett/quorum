@@ -20,7 +20,7 @@ def test_home_route_shows_meetings(client, db_connection, app):
     # The meetings are now loaded via JavaScript, so we can't test the full page load.
     assert b'id="meetings-container"' in response.data
     assert b"No meetings are currently available" in response.data
-    assert b'new EventSource("/api/updates")' in response.data
+    assert b'new EventSource("/api/meetings/stream")' in response.data
 
 
 def test_checkin_page_loads(client, db_connection, app):

@@ -139,7 +139,7 @@
             updateMeetingsList(initialMeetings);
             
             // Set up SSE connection
-            const eventSource = new EventSource("/api/updates");
+            const eventSource = new EventSource("/api/meetings/stream");
             
             eventSource.onmessage = function(event) {
                 try {
@@ -169,6 +169,7 @@
                 });
                 
                 // Process each meeting from the server
+                // Meetings are in most-recent-first order
                 meetings.forEach(meeting => {
                     const existingCard = existingMeetings.get(meeting.id);
                     
@@ -179,7 +180,7 @@
                     } else {
                         // Create new meeting card
                         const newCard = createMeetingCard(meeting);
-                        container.prepend(newCard); // Add new meetings at the top
+                        container.append(newCard);
                     }
                 });
                 
@@ -220,7 +221,7 @@
                     // then append the real IDs:
                     const voteUrl = window.URL_TEMPLATES.vote
                         .replace(/\/meetings\/0\/elections\/0\//,
-                                 `/meetings/${meetingId}/elections/${electionId}/`);
+                                 `/meetings/${meeting.id}/elections/${election.id}/`);
                     return `
                         <div class="election-item" data-election-id="${election.id}">
                         <h3 class="election-title">${escapeHtml(election.name)}</h3>

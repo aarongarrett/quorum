@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from app.services import create_meeting
+from app.services import checkin, create_meeting
 
 
 def test_api_checkin_success(client, db_connection, app):
@@ -129,3 +129,78 @@ def test_api_checkin_server_error(client, db_connection, monkeypatch, app):
     assert response.status_code == 500
     assert "error" in response.json
     assert "Database error" in response.json["error"]
+
+
+def test_user_stream_sse(client, db_connection, monkeypatch):
+    import json
+    import time
+
+    tz = timezone.utc
+    now = datetime.now(tz)
+    m1_id, m1_code = create_meeting(
+        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
+    )
+    m2_id, m2_code = create_meeting(
+        db_connection, now - timedelta(hours=3), now - timedelta(hours=2)
+    )
+
+    chk_token = checkin(db_connection, m1_id, m1_code)
+    client.set_cookie(f"meeting_{m1_id}", chk_token)
+
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    # 3) Hit the stream
+    resp = client.get("/api/meetings/stream")
+    assert resp.status_code == 200
+
+    # 4) Pull first chunk
+    first = next(resp.response)
+    data = json.loads(first.split(b"data: ", 1)[1])
+    # should only include meeting 1
+    assert isinstance(data, list)
+    ids = [m["id"] for m in data]
+    assert m1_id in ids and m2_id not in ids
+    assert data[0]["checked_in"]
+    assert len(data[0]["elections"]) == 0
+
+
+def test_admin_stream_sse(client, db_connection, monkeypatch, app):
+    import json
+    import time
+
+    from app.models import Election, ElectionVote
+
+    # seed an admin session
+    with client.session_transaction() as sess:
+        sess["is_admin"] = True
+
+    now = datetime.now(timezone.utc)
+    m_id, _ = create_meeting(
+        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
+    )
+    # create an election and some votes
+    election = Election(meeting_id=m_id, name="Test")
+    db_connection.add(election)
+    db_connection.flush()
+    # cast votes
+    for i, opt in enumerate(["A", "B", "A"]):
+        db_connection.add(
+            ElectionVote(election_id=election.id, vote=opt, vote_token=f"T{i}")
+        )
+    db_connection.commit()
+
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    print(f"HERE:  {app.config}")
+
+    resp = client.get("/api/admin/meetings/stream")
+    assert resp.status_code == 200
+    chunk = next(resp.response)
+    print(chunk)
+    data = json.loads(chunk.split(b"data: ", 1)[1])
+    # data should be a list of meeting summaries
+    summary = next(m for m in data if m["id"] == m_id)
+    assert summary["checkins"] == 0  # no checkins in this example
+    assert summary["elections"][0]["total_votes"] == 3
+    assert summary["elections"][0]["votes"]["A"] == 2
+    assert summary["elections"][0]["votes"]["B"] == 1

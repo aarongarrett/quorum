@@ -8,14 +8,7 @@ from flask import Response as FlaskResponse
 from flask import current_app, jsonify, request, session
 
 from ...database import get_db_session
-from ...services import (
-    checkin,
-    get_available_meetings,
-    get_checkin_count,
-    get_election,
-    get_elections,
-    get_meetings,
-)
+from ...services import checkin, get_all_meetings, get_available_meetings
 
 api_bp = Blueprint("api", __name__, template_folder="templates")
 
@@ -26,25 +19,15 @@ def admin_stream_api():
         return jsonify({"error": "Unauthorized"}), 403
 
     db = next(get_db_session())
+    tz = current_app.config["TZ"]
 
     def event_stream():
         try:
             while True:
-                result = {}
-                for meeting in get_meetings(db, current_app.config["TZ"]):
-                    result[str(meeting["id"])] = {
-                        "checkins": get_checkin_count(db, meeting["id"]),
-                        "elections": {},
-                    }
-                    for election_id in get_elections(db, meeting["id"]):
-                        result[str(meeting["id"])]["elections"][
-                            str(election_id)
-                        ] = get_election(db, election_id)
-
-                data = json.dumps(result)
-
+                meetings = get_all_meetings(db, tz)
+                data = json.dumps(meetings, default=str)
                 yield f"data: {data}\n\n"
-                time.sleep(5)  # Update interval
+                time.sleep(5)
 
         except Exception as e:
             yield f"event: error\ndata: An error occurred {e}\n\n"
@@ -66,15 +49,23 @@ def user_stream_api():
     cookies = dict(request.cookies)
     meeting_tokens = session.get("meeting_tokens", {})
 
+    # Get tokens from cookies
+    vote_tokens = {
+        int(key.split("_", 1)[1]): val
+        for key, val in cookies.items()
+        if key.startswith("meeting_")
+    }
+    # In case a cookie was cleared, take tokens from the session
+    vote_tokens.update(meeting_tokens)
+    tz = current_app.config["TZ"]
+
     def event_stream():
         while True:
             try:
-                meetings = get_available_meetings(
-                    db, cookies, meeting_tokens, current_app.config["TZ"]
-                )
+                meetings = get_available_meetings(db, vote_tokens, tz)
 
                 # Format as SSE data
-                data = json.dumps(meetings)
+                data = json.dumps(meetings, default=str)
                 yield f"data: {data}\n\n"
 
                 # Wait before next update

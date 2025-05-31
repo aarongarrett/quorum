@@ -144,6 +144,10 @@ Admin Dashboard
         gap: 0.5rem;
     }
 
+    .card-details {
+        width: 100%;
+    }
+
 </style>
 {% endblock %}
 
@@ -171,11 +175,11 @@ Admin Dashboard
 
 {% block admin_content %}
 
-    {% for meeting_dict in meeting_info %}
-    <div class="card" data-meeting-id="{{ meeting_dict.id }}">
+    {% for meeting in meetings %}
+    <div class="card" data-meeting-id="{{ meeting.id }}">
         <div class="card-header">
             <div>
-                <h2 class="card-title">{{ meeting_dict.start_time|strftime('%B %d, %Y') }}</h2>
+                <h2 class="card-title">{{ meeting.start_time|strftime('%B %d, %Y') }}</h2>
                 <div class="card-meta">
                     <div class="card-meta-item">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -184,7 +188,7 @@ Admin Dashboard
                             <line x1="8" y1="2" x2="8" y2="6"></line>
                             <line x1="3" y1="10" x2="21" y2="10"></line>
                         </svg>
-                        {{ meeting_dict.start_time|strftime('%I:%M %p') }} - {{ meeting_dict.end_time|strftime('%I:%M %p') }}
+                        {{ meeting.start_time|strftime('%I:%M %p') }} - {{ meeting.end_time|strftime('%I:%M %p') }}
                     </div>
                     <div class="card-meta-item">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -193,12 +197,12 @@ Admin Dashboard
                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        <span class="checkin-count">{{ meeting_dict.checkins }}</span>&nbsp;Checked In
+                        <span class="checkin-count">{{ meeting.checkins }}</span>&nbsp;Checked In
                     </div>
                 </div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('admin.election_create_ui', meeting_id=meeting_dict.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('admin.election_create_ui', meeting_id=meeting.id) }}" class="btn btn-primary">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                         <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -206,7 +210,7 @@ Admin Dashboard
                     </svg>
                     Create Election
                 </a>
-                <button class="btn btn-danger delete-meeting-btn" data-meeting-id="{{ meeting_dict.id }}" data-meeting-date="{{ meeting_dict.start_time|strftime('%B %d, %Y') }}">
+                <button class="btn btn-danger delete-meeting-btn" data-meeting-id="{{ meeting.id }}" data-meeting-date="{{ meeting.start_time|strftime('%B %d, %Y') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -222,16 +226,16 @@ Admin Dashboard
             <div class="card-info">
                 <div class="card-left-sidebar">
                     <div class="meeting-code" data-bs-toggle="tooltip" title="Share this code with attendees to check in to the meeting.">
-                        {{ meeting_dict.meeting_code }}
+                        {{ meeting.meeting_code }}
                     </div>
                     <div class="qr-code" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Scan for direct check-in.">
-                        {% set qr_url = base_url + '/meetings/' + meeting_dict.id|string + '/qr.svg' %}
-                        <img src="{{ qr_url }}" alt="QR Code for {{ meeting_dict.meeting_code }}">
+                        {% set qr_url = base_url + '/meetings/' + meeting.id|string + '/qr.svg' %}
+                        <img src="{{ qr_url }}" alt="QR Code for {{ meeting.meeting_code }}">
                     </div>
                 </div>
                 <div class="card-details">
                     
-                    {% if meeting_dict.elections %}
+                    {% if meeting.elections %}
                         <table class="election-table">
                             <thead>
                                 <tr>
@@ -249,7 +253,7 @@ Admin Dashboard
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for election in meeting_dict.elections %}
+                                {% for election in meeting.elections %}
                                 <tr class="election-row">
                                     <td>{{ election.name }}</td>
                                     <td id="vote-count-{{ election.id }}" class="vote-count">{{ election.total_votes }}</td>
@@ -262,7 +266,7 @@ Admin Dashboard
                                     <td id="vote-{{ election.id }}-G" class="vote-count">{{ election.votes['G'] }}</td>
                                     <td id="vote-{{ election.id }}-H" class="vote-count">{{ election.votes['H'] }}</td>
                                     <td class="action-buttons">
-                                        <button class="btn btn-sm btn-outline-danger delete-election-btn" data-meeting-id="{{ meeting_dict.id }}" data-election-id="{{ election.id }}" data-election-name="{{ election.name }}">
+                                        <button class="btn btn-sm btn-outline-danger delete-election-btn" data-meeting-id="{{ meeting.id }}" data-election-id="{{ election.id }}" data-election-name="{{ election.name }}">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
                                                 <polyline points="3 6 5 6 21 6"></polyline>
                                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -351,7 +355,7 @@ Admin Dashboard
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const eventSource = new EventSource('/api/admin/updates');
+    const eventSource = new EventSource('/api/admin/meetings/stream');
     
     eventSource.onmessage = function(event) {
         try {
@@ -370,40 +374,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 5000);
     };
 
-    function updateDashboard(data) {
-        Object.entries(data).forEach(([meetingId, meetingData]) => {
-        // Update check-in count for this meeting
-        const checkinElements = document.querySelectorAll(`[data-meeting-id="${meetingId}"] .checkin-count`);
-        checkinElements.forEach(element => {
-            element.textContent = meetingData.checkins;
-        });
+    function updateDashboard(meetings) {
+        meetings.forEach(meeting => {
+            const meetingId = meeting.id;
 
-        // Update elections for this meeting
-        if (meetingData.elections) {
-            Object.entries(meetingData.elections).forEach(([electionId, election]) => {
-                // Update total votes for this election
-                const voteCountElement = document.querySelector(
-                    `#vote-count-${electionId}`
-                );
-                if (voteCountElement) {
-                    voteCountElement.textContent = election.total_votes;
-                }
+            // 1) Update check‑in count
+            document
+            .querySelectorAll(`[data-meeting-id="${meetingId}"] .checkin-count`)
+            .forEach(el => { el.textContent = meeting.checkins; });
 
-                // Update individual vote options if needed
-                if (election.votes) {
-                    Object.entries(election.votes).forEach(([option, count]) => {
-                        const optionElement = document.querySelector(
-                            `#vote-${electionId}-${option}`
-                        );
-                        if (optionElement) {
-                            optionElement.textContent = count;
-                        }
-                    });
-                }
+            // 2) Update each election under this meeting
+            meeting.elections.forEach(election => {
+            const eid = election.id;
+
+            // 2a) total votes
+            const totalEl = document.querySelector(`#vote-count-${eid}`);
+            if (totalEl) totalEl.textContent = election.total_votes;
+
+            // 2b) per‐option counts
+            Object.entries(election.votes || {}).forEach(([opt, cnt]) => {
+                const optEl = document.querySelector(`#vote-${eid}-${opt}`);
+                if (optEl) optEl.textContent = cnt;
             });
-        }
+            });
         });
     }
+
 });
 </script>
 

@@ -29,8 +29,17 @@ def home_ui() -> FlaskResponse:
     db = next(get_db_session())
     cookies = dict(request.cookies)
     meeting_tokens = session.get("meeting_tokens", {})
+    # Get tokens from cookies
+    vote_tokens = {
+        int(key.split("_", 1)[1]): val
+        for key, val in cookies.items()
+        if key.startswith("meeting_")
+    }
+    # In case a cookie was cleared, take tokens from the session
+    vote_tokens.update(meeting_tokens)
+    tz = current_app.config["TZ"]
     try:
-        meetings = get_available_meetings(db, cookies, meeting_tokens)
+        meetings = get_available_meetings(db, vote_tokens, tz)
         return render_template("home.html", meetings=meetings)
     finally:
         db.close()
@@ -86,7 +95,7 @@ def checkin_ui(
                 response = redirect(url_for("public.home_ui"))
                 response.set_cookie(
                     f"meeting_{meeting_id}",
-                    "checked_in",
+                    vote_token,
                     max_age=3600 * current_app.config["MEETING_DURATION_HOURS"],
                     httponly=True,
                     secure=request.is_secure,
@@ -99,7 +108,8 @@ def checkin_ui(
 
         # For GET requests, show the check-in form
         # Get meeting details
-        meeting = get_meeting(db, meeting_id)
+        tz = current_app.config["TZ"]
+        meeting = get_meeting(db, meeting_id, tz)
         if not meeting:
             flash(f"Invalid meeting ID ({meeting_id})", "error")
             return redirect(url_for("public.home_ui"))

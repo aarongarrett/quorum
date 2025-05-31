@@ -16,6 +16,8 @@ from flask import (
     url_for,
 )
 
+from app.services.meetings import get_all_meetings
+
 from ...database import get_db_session
 from ...services import (
     create_election,
@@ -24,7 +26,6 @@ from ...services import (
     delete_meeting,
     generate_qr_code,
     get_meeting,
-    get_meetings,
 )
 
 admin_bp = Blueprint("admin", __name__, template_folder="templates")
@@ -66,17 +67,9 @@ def dashboard_ui():
     db = next(get_db_session())
 
     try:
-        # Get all meetings and their stats
-        meeting_info = []
-        for meeting in get_meetings(db, current_app.config["TZ"]):
-            meeting_info.append(
-                get_meeting(db, meeting["id"], current_app.config["TZ"])
-            )
-
+        meetings = get_all_meetings(db, current_app.config["TZ"])
         base_url = request.url_root.rstrip("/") + "/admin"
-        return render_template(
-            "dashboard.html", meeting_info=meeting_info, base_url=base_url
-        )
+        return render_template("dashboard.html", meetings=meetings, base_url=base_url)
     finally:
         db.close()
 

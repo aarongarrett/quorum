@@ -11,10 +11,9 @@ from .elections import (
 from .meetings import (
     create_meeting,
     delete_meeting,
+    get_all_meetings,
     get_available_meetings,
-    get_checkin_count,
     get_meeting,
-    get_meetings,
 )
 from .utils import generate_qr_code, is_available, make_pronounceable
 
@@ -33,9 +32,8 @@ __all__ = [
     "create_meeting",
     "delete_meeting",
     "get_available_meetings",
-    "get_checkin_count",
     "get_meeting",
-    "get_meetings",
+    "get_all_meetings",
     "is_meeting_available",
     # utils
     "generate_qr_code",

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta
 
 import pytest
 import requests
@@ -13,10 +14,9 @@ def app():
     return create_app("testing")
 
 
-@pytest.fixture
-def admin_user():
+@pytest.fixture(scope="session")
+def admin_user(app):
     """Fixture to create an admin user for testing"""
-    app = create_app("testing")
     with app.app_context():
         yield app.config["ADMIN_PASSWORD"]
 
@@ -26,21 +26,52 @@ def base_url():
     return os.environ["BASE_URL"]
 
 
-@pytest.fixture(scope="session", autouse=True)
-def seed_via_api(base_url, admin_user):
+@pytest.fixture(scope="session")
+def seed_via_api(app, base_url, admin_user):
     s = requests.Session()
     # 1) Log in as admin
-    s.post(f"{base_url}/admin/login", data={"password": admin_user})
+    login_response = s.post(f"{base_url}/api/login", json={"password": admin_user})
+    assert login_response.status_code == 200
     # 2) Create your meeting & election exactly as your UI does
-    s.post(
-        f"{base_url}/admin/meetings/create",
-        data={
-            "start_time": "2025-05-28T22:00-04:00",
-            "end_time": "2025-05-28T23:59-04:00",
+    start_time = datetime.now(app.config["TZ"])
+    meeting_response = s.post(
+        f"{base_url}/api/admin/meetings",
+        json={
+            "start_time": start_time.isoformat(),
+            "end_time": (start_time + timedelta(hours=2)).isoformat(),
         },
     )
-    s.post(f"{base_url}/admin/create_election/1", data={"name": "Test"})
-    return s
+    assert meeting_response.status_code == 201
+    # get the meeting id out of the json response
+    meeting_json = meeting_response.json()
+    meeting_id = meeting_json["meeting_id"]
+    meeting_code = meeting_json["meeting_code"]
+    election_response = s.post(
+        f"{base_url}/api/admin/meetings/{meeting_id}/elections", json={"name": "Test"}
+    )
+    assert election_response.status_code == 201
+    # get the election id from the election response
+    election_id = election_response.json()["election_id"]
+    # 3) Check in as a user
+    checkin_response = s.post(
+        f"{base_url}/api/meetings/{meeting_id}/checkins",
+        json={"meeting_code": meeting_code},
+    )
+    assert checkin_response.status_code == 200
+    # get the checkin token from the checkin response
+    checkin_token = checkin_response.json()["token"]
+    # 4) Vote in the election
+    s.post(
+        f"{base_url}/api/meetings/{meeting_id}/elections/{election_id}/votes",
+        json={"token": checkin_token, "vote": "F"},
+    )
+    return {
+        "session": s,
+        "meeting_id": meeting_id,
+        "meeting_code": meeting_code,
+        "election_id": election_id,
+        "checkin_token": checkin_token,
+    }
 
 
 @pytest.fixture(scope="session")
@@ -53,3 +84,11 @@ def browser():
     driver = webdriver.Remote(command_executor=selenium_url, options=opts)
     yield driver
     driver.quit()
+
+
+@pytest.fixture(autouse=True)
+def clear_cookies(browser):
+    """Clear cookies before and after each test"""
+    browser.delete_all_cookies()
+    yield
+    browser.delete_all_cookies()

@@ -87,17 +87,16 @@
     <div class="card">
         <h1 class="page-title">{{ election_name }}</h1>
         <p class="page-subtitle">Cast your vote</p>
-        <form method="POST" id="voteForm">
+        <form method="POST" id="voteForm" data-election-id="{{ election_id }}">
             <div class="choices">
                 {% for option in ['A','E','B','F','C','G','D','H'] %}
                     <div class="choice-option">
                         <input 
                             type="radio" 
                             id="opt{{ option }}" 
-                            name="vote" 
+                            name="election_{{ election_id }}" 
                             value="{{ option }}" 
                             required
-                            {% if existing_vote == option %}checked{% endif %}
                         >
                         <label for="opt{{ option }}" class="choice-label">
                             {{ option }}
@@ -107,7 +106,7 @@
             </div>
             
             <button type="submit" class="btn btn-primary" id="submitBtn">
-                {{ 'Update Vote' if existing_vote else 'Submit Vote' }}
+                Submit Vote
             </button>
         </form>
     

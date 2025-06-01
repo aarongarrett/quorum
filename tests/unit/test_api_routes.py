@@ -191,12 +191,9 @@ def test_admin_stream_sse(client, db_connection, monkeypatch, app):
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
 
-    print(f"HERE:  {app.config}")
-
     resp = client.get("/api/admin/meetings/stream")
     assert resp.status_code == 200
     chunk = next(resp.response)
-    print(chunk)
     data = json.loads(chunk.split(b"data: ", 1)[1])
     # data should be a list of meeting summaries
     summary = next(m for m in data if m["id"] == m_id)
@@ -204,3 +201,141 @@ def test_admin_stream_sse(client, db_connection, monkeypatch, app):
     assert summary["elections"][0]["total_votes"] == 3
     assert summary["elections"][0]["votes"]["A"] == 2
     assert summary["elections"][0]["votes"]["B"] == 1
+
+
+def test_create_meeting_api_success(client, app):
+    """Test successful meeting creation via API"""
+    with client.session_transaction() as sess:
+        sess["is_admin"] = True
+
+    start_time = (datetime.now(app.config["TZ"]) + timedelta(hours=1)).isoformat()
+    end_time = (datetime.now(app.config["TZ"]) + timedelta(hours=2)).isoformat()
+
+    response = client.post(
+        "/api/admin/meetings", json={"start_time": start_time, "end_time": end_time}
+    )
+
+    assert response.status_code == 201
+    assert "meeting_id" in response.json
+    assert "meeting_code" in response.json
+    assert isinstance(response.json["meeting_id"], int)
+    assert len(response.json["meeting_code"]) > 0
+
+
+def test_create_meeting_api_unauthorized(client):
+    """Test meeting creation without admin privileges"""
+    response = client.post(
+        "/api/admin/meetings",
+        json={"start_time": "2023-01-01T10:00:00", "end_time": "2023-01-01T12:00:00"},
+    )
+    assert response.status_code == 403
+    assert "error" in response.json
+    assert "Unauthorized" in response.json["error"]
+
+
+def test_create_meeting_api_missing_times(client):
+    """Test meeting creation with missing required fields"""
+    with client.session_transaction() as sess:
+        sess["is_admin"] = True
+
+    # Missing start_time
+    response = client.post(
+        "/api/admin/meetings", json={"end_time": "2023-01-01T12:00:00"}
+    )
+    assert response.status_code == 400
+
+    # Missing end_time
+    response = client.post(
+        "/api/admin/meetings", json={"start_time": "2023-01-01T10:00:00"}
+    )
+    assert response.status_code == 400
+
+
+def test_create_election_api_success(client, db_connection, app):
+    """Test successful election creation via API"""
+    # Create a test meeting
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+
+    with client.session_transaction() as sess:
+        sess["is_admin"] = True
+
+    response = client.post(
+        f"/api/admin/meetings/{meeting_id}/elections", json={"name": "Test Election"}
+    )
+
+    assert response.status_code == 201
+    assert "election_id" in response.json
+    assert isinstance(response.json["election_id"], int)
+
+
+def test_create_election_api_invalid_meeting(client):
+    """Test election creation for non-existent meeting"""
+    with client.session_transaction() as sess:
+        sess["is_admin"] = True
+
+    response = client.post(
+        "/api/admin/meetings/999999/elections", json={"name": "Test Election"}
+    )
+
+    assert response.status_code == 500  # or 404, depending on implementation
+
+
+def test_vote_api_success(client, db_connection, app):
+    """Test successful vote submission via API"""
+    # Create a test meeting and election
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+
+    # Create an election
+    from app.models import Election
+
+    election = Election(meeting_id=meeting_id, name="Test Election")
+    db_connection.add(election)
+    db_connection.flush()
+
+    # Create a check-in to get a valid token
+    token = checkin(db_connection, meeting_id, meeting_code)
+
+    response = client.post(
+        f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
+        json={"token": token, "vote": "Yes"},
+    )
+
+    assert response.status_code == 200
+    assert response.json == {"success": True}
+
+
+def test_vote_api_invalid_token(client, db_connection):
+    """Test vote submission with invalid token"""
+    # Create a test meeting and election
+    from app.models import Election
+
+    meeting_id = 1  # Assuming this exists or is set up in fixture
+    election = Election(meeting_id=meeting_id, name="Test Election")
+    db_connection.add(election)
+    db_connection.flush()
+
+    response = client.post(
+        f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
+        json={"token": "invalid-token", "vote": "Yes"},
+    )
+
+    assert response.status_code == 404
+    assert "error" in response.json
+
+
+def test_vote_api_missing_fields(client):
+    """Test vote submission with missing required fields"""
+    response = client.post(
+        "/api/meetings/1/elections/1/votes",
+        json={"token": "test-token"},  # Missing vote
+    )
+    assert response.status_code == 400
+
+    response = client.post(
+        "/api/meetings/1/elections/1/votes", json={"vote": "Yes"}  # Missing token
+    )
+    assert response.status_code == 400

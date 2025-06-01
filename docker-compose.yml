@@ -27,10 +27,13 @@ services:
       FLASK_ENV: testing
       BASE_URL: http://web:5000
       SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
-      TOX_ENV_DIR: /app/.tox_docker
     volumes:
       - .:/app
+      # (optional) mount a named volume for the Docker tox cache
+      - tox_cache:/app/.tox
     depends_on:
       - web
       - selenium
 
+volumes:
+  tox_cache:

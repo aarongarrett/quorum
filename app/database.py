@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from typing import Iterator, Optional
 
 from sqlalchemy import Engine, create_engine
@@ -37,3 +38,14 @@ def get_db_session() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+@contextmanager
+def session_scope():
+    for db in get_db_session():
+        try:
+            yield db
+        finally:
+            # the generator’s finally already calls db.close(),
+            # so we don’t need to do it again here
+            pass

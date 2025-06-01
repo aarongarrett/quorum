@@ -32,6 +32,9 @@ junit.xml
 pytest/
 *.py,cover
 
+# Debug
+*.png
+
 # OS
 .DS_Store
 .DS_Store?

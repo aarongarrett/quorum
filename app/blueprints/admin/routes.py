@@ -18,7 +18,7 @@ from flask import (
 
 from app.services.meetings import get_all_meetings
 
-from ...database import get_db_session
+from ...database import session_scope
 from ...services import (
     create_election,
     create_meeting,
@@ -64,14 +64,10 @@ def dashboard_ui():
     resp = _require_admin()
     if resp:
         return resp
-    db = next(get_db_session())
-
-    try:
+    with session_scope() as db:
         meetings = get_all_meetings(db, current_app.config["TZ"])
         base_url = request.url_root.rstrip("/") + "/admin"
         return render_template("dashboard.html", meetings=meetings, base_url=base_url)
-    finally:
-        db.close()
 
 
 @admin_bp.route("/meetings", methods=["GET", "POST"])
@@ -79,7 +75,6 @@ def meeting_create_ui():
     resp = _require_admin()
     if resp:
         return resp
-    db = next(get_db_session())
     if request.method == "POST":
         try:
             # Get form data
@@ -106,7 +101,8 @@ def meeting_create_ui():
                 flash("Invalid date/time format", "error")
                 return redirect(request.url)
 
-            m_id, m_code = create_meeting(db, start_time, end_time)
+            with session_scope() as db:
+                m_id, m_code = create_meeting(db, start_time, end_time)
             flash(f"Meeting created (code: {m_code})", "success")
             return redirect(url_for("admin.dashboard_ui"))
         except Exception as e:
@@ -124,8 +120,8 @@ def meeting_delete_ui(meeting_id):
     resp = _require_admin()
     if resp:
         return resp
-    db = next(get_db_session())
-    success = delete_meeting(db, meeting_id)
+    with session_scope() as db:
+        success = delete_meeting(db, meeting_id)
     flash("Meeting deleted" if success else "Meeting not found", "info")
     return redirect(url_for("admin.dashboard_ui"))
 
@@ -135,11 +131,11 @@ def election_create_ui(meeting_id):
     resp = _require_admin()
     if resp:
         return resp
-    db = next(get_db_session())
     if request.method == "POST":
         try:
             name = request.form["name"]
-            create_election(db, meeting_id, name)
+            with session_scope() as db:
+                create_election(db, meeting_id, name)
             flash(f'Election created (name: "{name}")', "success")
             return redirect(url_for("admin.dashboard_ui"))
         except Exception as e:
@@ -159,8 +155,8 @@ def election_delete_ui(meeting_id, election_id):
     resp = _require_admin()
     if resp:
         return resp
-    db = next(get_db_session())
-    success = delete_election(db, meeting_id, election_id)
+    with session_scope() as db:
+        success = delete_election(db, meeting_id, election_id)
     flash("Election deleted" if success else "Election not found", "info")
     return redirect(url_for("admin.dashboard_ui"))
 
@@ -184,8 +180,7 @@ def generate_qr(meeting_id: int, fmt: str = "svg") -> FlaskResponse:
         response.mimetype = "text/plain"
         return response
 
-    db = next(get_db_session())
-    try:
+    with session_scope() as db:
         meeting = get_meeting(db, meeting_id)
         if not meeting:
             response = make_response("Invalid meeting", 404)
@@ -209,5 +204,3 @@ def generate_qr(meeting_id: int, fmt: str = "svg") -> FlaskResponse:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         return response
-    finally:
-        db.close()

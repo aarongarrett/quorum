@@ -205,7 +205,7 @@ def test_submit_vote(client, db_connection, app):
     # Submit vote
     response = client.post(
         f"/meetings/{meeting_id}/elections/{election_id}/votes",
-        data={"vote": "A"},
+        data={f"election_{election_id}": "A"},
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -229,7 +229,7 @@ def test_duplicate_vote_prevention(client, db_connection, app):
     # First vote (should succeed)
     response = client.post(
         f"/meetings/{meeting_id}/elections/{election_id}/votes",
-        data={"vote": "A"},
+        data={f"election_{election_id}": "A"},
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -238,7 +238,7 @@ def test_duplicate_vote_prevention(client, db_connection, app):
     # Second vote attempt (should fail)
     response = client.post(
         f"/meetings/{meeting_id}/elections/{election_id}/votes",
-        data={"vote": "B"},
+        data={f"election_{election_id}": "B"},
         follow_redirects=True,
     )
     assert response.status_code == 200

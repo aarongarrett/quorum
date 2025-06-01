@@ -1,4 +1,6 @@
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 from .base_page import BasePage
 
@@ -11,7 +13,7 @@ class UserHomePage(BasePage):
     SUCCESS_MESSAGE = (By.CSS_SELECTOR, ".alert.alert-success")
     ELECTION_OPTIONS = (By.CSS_SELECTOR, "input[name^='election_']")
     VOTE_BUTTON = (By.CSS_SELECTOR, "button[type='submit']")
-    VOTE_CONFIRMATION = (By.CSS_SELECTOR, ".vote-confirmation")
+    VOTE_CONFIRMATION = (By.CSS_SELECTOR, ".vote-cast")
 
     def get_meeting_cards(self):
         """Return all meeting cards on the page"""
@@ -39,15 +41,38 @@ class UserHomePage(BasePage):
         """Get success message text if present"""
         return self.browser.find_element(*self.SUCCESS_MESSAGE).text
 
-    def select_vote_option(self, election_id, option):
-        """Select a voting option for a specific election"""
-        option_selector = f"input[name='election_{election_id}'][value='{option}']"
-        self.browser.find_element(By.CSS_SELECTOR, option_selector).click()
+    def select_vote_option(self, option):
+        """Select a voting option"""
+        label = self.browser.find_element(By.CSS_SELECTOR, f'label[for="opt{option}"]')
+        label.click()
+
+    def is_vote_option_selected(self, option):
+        return self.browser.find_element(By.ID, f"opt{option}").is_selected()
 
     def submit_vote(self):
         """Submit the vote form"""
-        self.browser.find_element(*self.VOTE_BUTTON).click()
+        submit_btn = WebDriverWait(self.browser, 10).until(
+            EC.presence_of_element_located(self.VOTE_BUTTON)
+        )
+        WebDriverWait(self.browser, 10).until(
+            lambda d: submit_btn.is_enabled() and submit_btn.is_displayed()
+        )
+        self.browser.execute_script("arguments[0].click();", submit_btn)
 
     def is_vote_confirmed(self):
         """Check if vote confirmation is displayed"""
         return len(self.browser.find_elements(*self.VOTE_CONFIRMATION)) > 0
+
+    def get_checkin_url(self, meeting_id):
+        """Get the check-in URL for a specific meeting"""
+        meeting_card = self.get_meeting_card_by_id(meeting_id)
+        checkin_button = meeting_card.find_element(By.CSS_SELECTOR, "a.btn.btn-primary")
+        return checkin_button.get_attribute("href")
+
+    def get_vote_url(self, election_id):
+        """Get the vote URL for a specific election"""
+        election_div = self.browser.find_element(
+            By.CSS_SELECTOR, f"[data-election-id='{election_id}']"
+        )
+        vote_button = election_div.find_element(By.CSS_SELECTOR, "a.btn.btn-primary")
+        return vote_button.get_attribute("href")

@@ -199,8 +199,6 @@ def test_admin_dashboard_displays_meetings_and_elections(
     response = authenticated_client.get("/admin/dashboard")
     assert response.status_code == 200
 
-    print(response.data)
-
     # Verify meeting date and time are displayed in the correct format
     date_str = strftime(start_time, "%B %d, %Y").encode()
     start_time_str = strftime(start_time, "%I:%M %p").encode()

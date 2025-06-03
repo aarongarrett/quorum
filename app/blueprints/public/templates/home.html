@@ -253,8 +253,8 @@
                         ${startTime.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                     </div>
                     <div class="meeting-time">
-                        ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - 
-                        ${endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        ${startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric' })} - 
+                        ${endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric' })}
                     </div>
                     ${statusBadge}
                 `;

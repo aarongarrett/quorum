@@ -19,6 +19,7 @@ from flask import (
 from app.services.meetings import get_all_meetings
 
 from ...database import session_scope
+from ...models import Meeting
 from ...services import (
     create_election,
     create_meeting,

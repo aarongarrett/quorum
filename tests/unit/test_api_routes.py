@@ -203,7 +203,7 @@ def test_admin_stream_sse(client, db_connection, monkeypatch, app):
     assert summary["elections"][0]["votes"]["B"] == 1
 
 
-def test_create_meeting_api_success(client, app):
+def test_api_create_meeting_success(client, app):
     """Test successful meeting creation via API"""
     with client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -222,7 +222,7 @@ def test_create_meeting_api_success(client, app):
     assert len(response.json["meeting_code"]) > 0
 
 
-def test_create_meeting_api_unauthorized(client):
+def test_api_create_meeting_unauthorized(client):
     """Test meeting creation without admin privileges"""
     response = client.post(
         "/api/admin/meetings",
@@ -233,7 +233,7 @@ def test_create_meeting_api_unauthorized(client):
     assert "Unauthorized" in response.json["error"]
 
 
-def test_create_meeting_api_missing_times(client):
+def test_api_create_meeting_missing_times(client):
     """Test meeting creation with missing required fields"""
     with client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -251,7 +251,7 @@ def test_create_meeting_api_missing_times(client):
     assert response.status_code == 400
 
 
-def test_create_election_api_success(client, db_connection, app):
+def test_api_create_election_success(client, db_connection, app):
     """Test successful election creation via API"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
@@ -270,7 +270,7 @@ def test_create_election_api_success(client, db_connection, app):
     assert isinstance(response.json["election_id"], int)
 
 
-def test_create_election_api_invalid_meeting(client):
+def test_api_create_election_invalid_meeting(client):
     """Test election creation for non-existent meeting"""
     with client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -282,7 +282,7 @@ def test_create_election_api_invalid_meeting(client):
     assert response.status_code == 500  # or 404, depending on implementation
 
 
-def test_vote_api_success(client, db_connection, app):
+def test_api_vote_success(client, db_connection, app):
     """Test successful vote submission via API"""
     # Create a test meeting and election
     start_time = datetime.now(app.config["TZ"])
@@ -301,33 +301,37 @@ def test_vote_api_success(client, db_connection, app):
 
     response = client.post(
         f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
-        json={"token": token, "vote": "Yes"},
+        json={"token": token, "vote": "E"},
     )
 
     assert response.status_code == 200
     assert response.json == {"success": True}
 
 
-def test_vote_api_invalid_token(client, db_connection):
+def test_api_vote_invalid_token(client, db_connection, app):
     """Test vote submission with invalid token"""
     # Create a test meeting and election
     from app.models import Election
 
-    meeting_id = 1  # Assuming this exists or is set up in fixture
+    # Create a test meeting and election
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+
     election = Election(meeting_id=meeting_id, name="Test Election")
     db_connection.add(election)
     db_connection.flush()
 
     response = client.post(
         f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
-        json={"token": "invalid-token", "vote": "Yes"},
+        json={"token": "invalid-token", "vote": "C"},
     )
 
     assert response.status_code == 404
     assert "error" in response.json
 
 
-def test_vote_api_missing_fields(client):
+def test_api_vote_missing_fields(client):
     """Test vote submission with missing required fields"""
     response = client.post(
         "/api/meetings/1/elections/1/votes",
@@ -336,6 +340,6 @@ def test_vote_api_missing_fields(client):
     assert response.status_code == 400
 
     response = client.post(
-        "/api/meetings/1/elections/1/votes", json={"vote": "Yes"}  # Missing token
+        "/api/meetings/1/elections/1/votes", json={"vote": "A"}  # Missing token
     )
     assert response.status_code == 400

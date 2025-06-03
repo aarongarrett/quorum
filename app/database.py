@@ -18,9 +18,14 @@ def configure_database(uri: Optional[str] = None) -> None:
     global engine, SessionLocal
     if uri is None:
         uri = os.environ.get("DATABASE_URL", "sqlite:///quorum.db")
+
+    connect_args = {}
+    if uri.startswith("sqlite"):
+        connect_args = {"check_same_thread": False}
+
     engine = create_engine(
         uri,
-        connect_args={"check_same_thread": False} if uri.startswith("sqlite") else {},
+        connect_args=connect_args,
         echo=False,  # Set to True for SQL query logging
     )
     SessionLocal = scoped_session(

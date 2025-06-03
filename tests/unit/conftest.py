@@ -1,7 +1,7 @@
 import pytest
 
 from app import create_app
-from app.database import configure_database, get_db_session
+from app.database import Base, configure_database
 
 
 @pytest.fixture
@@ -24,20 +24,34 @@ def authenticated_client(client):
 
 @pytest.fixture
 def db_connection(app):
-    # Ensure the database is configured with the test settings
-    from app.database import engine
+    # Have to import the globals here so that they'll be given
+    # real values by the configure_database step
+    from app.database import SessionLocal, engine
 
+    # Ensure the database is configured with the test settings
     # Reconfigure the database to ensure we're using the test config
     configure_database(app.config["DATABASE_URL"])
 
+    # Drop and re-create all tables so that the schema is fresh.
+    # (If you're already running Alembic migrations, replace this
+    #  with an `alembic upgrade head` or similar.)
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
     # Create a new connection and transaction
-    conn = engine.connect()
-    trans = conn.begin()
-    session = next(get_db_session())
-    # set up data here
+    connection = engine.connect()
+    transaction = connection.begin()
+
+    session = SessionLocal()
+
     yield session
 
-    # Cleanup
-    session.close()
-    trans.rollback()
-    conn.close()
+    # Cleanup: rollback the transaction and close both session & connection
+    SessionLocal.remove()  # expires & closes the SessionLocal
+    transaction.rollback()  # undoes all writes
+    connection.close()  # returns this connection to the pool
+
+    # (Optional) if you want a completely "empty" schema for the next test,
+    # you could drop_all/create_all again here. But because we rolled back
+    # the top‑level transaction, the DB is still as it was after step 2,
+    # so normally you don't need to do it again.

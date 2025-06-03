@@ -1,39 +1,34 @@
 services:
   web:
     build: .
-    command: flask run --host=0.0.0.0 --port=5000 --reload
+    command: flask run --host=0.0.0.0 --port=5000
     environment:
       FLASK_APP: run.py
-      FLASK_ENV: testing
-      DATABASE_URL: sqlite:///test.db
+      FLASK_ENV: production
+      DATABASE_URL: postgresql://postgres:pgadminpwd@db:5432/quorum_prod
     volumes:
       - .:/app
     ports:
       - "5000:5000"
-
-  selenium:
-    image: selenium/standalone-chrome:117.0
-    # ensure it matches the Chrome version installed in the Dockerfile above!
-    ports:
-      - "4444:4444"
-
-  tox:
-    build: .
-    working_dir: /app
-    entrypoint: ["tail", "-f", "/dev/null"]
-    tty: true
-    stdin_open: true
-    environment:
-      FLASK_ENV: testing
-      BASE_URL: http://web:5000
-      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
-    volumes:
-      - .:/app
-      # (optional) mount a named volume for the Docker tox cache
-      - tox_cache:/app/.tox
     depends_on:
-      - web
-      - selenium
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pgadminpwd
+      POSTGRES_DB:   quorum_prod
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
 
 volumes:
-  tox_cache:
+  pgdata_prod:

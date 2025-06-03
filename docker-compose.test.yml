@@ -1,0 +1,43 @@
+services:
+  web:
+    environment:
+      FLASK_ENV: testing
+      DATABASE_URL: postgresql://postgres:testpwd@db:5432/quorum_test
+
+  db:
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpwd
+      POSTGRES_DB:   quorum_test
+    volumes:
+      - pgdata_test:/var/lib/postgresql/data
+
+  selenium:
+    image: selenium/standalone-chrome:117.0
+    # ensure it matches the Chrome version installed in the Dockerfile above!
+    ports:
+      - "4444:4444"
+
+  tox:
+    build: .
+    working_dir: /app
+    entrypoint: ["tail", "-f", "/dev/null"]
+    tty: true
+    stdin_open: true
+    environment:
+      FLASK_ENV: testing
+      BASE_URL: http://web:5000
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+      DATABASE_URL: postgresql://postgres:testpwd@db:5432/quorum_test
+    volumes:
+      - .:/app
+      # (optional) mount a named volume for the Docker tox cache
+      - tox_cache:/app/.tox
+    depends_on:
+      - web
+      - selenium
+      - db
+
+volumes:
+  tox_cache:
+  pgdata_test:

@@ -22,7 +22,7 @@ class UserHomePage(BasePage):
     def get_meeting_card_by_id(self, meeting_id):
         """Find a meeting card by its ID"""
         return self.browser.find_element(
-            By.CSS_SELECTOR, f"[data-meeting-id='{meeting_id}']"
+            By.CSS_SELECTOR, f'[data-meeting-id="{meeting_id}"]'
         )
 
     def enter_meeting_code(self, code):

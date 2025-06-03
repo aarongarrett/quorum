@@ -9,6 +9,19 @@ from selenium.webdriver.chrome.options import Options
 from app import create_app
 
 
+@pytest.fixture(scope="session", autouse=True)
+def reset_database_via_http(base_url):
+    """
+    Before running any E2E tests, hit POST /_test/reset-db on the web container.
+    Since base_url points to the web container, this call empties the DB.
+    """
+    url = f"{base_url}/_test/reset-db"
+    resp = requests.post(url)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Failed to reset DB: {resp.status_code} {resp.text}")
+    yield
+
+
 @pytest.fixture(scope="session")
 def app():
     return create_app("testing")
@@ -27,50 +40,121 @@ def base_url():
 
 
 @pytest.fixture(scope="session")
-def seed_via_api(app, base_url, admin_user):
-    s = requests.Session()
-    # 1) Log in as admin
-    login_response = s.post(f"{base_url}/api/login", json={"password": admin_user})
-    assert login_response.status_code == 200
-    # 2) Create your meeting & election exactly as your UI does
-    start_time = datetime.now(app.config["TZ"])
-    meeting_response = s.post(
-        f"{base_url}/api/admin/meetings",
-        json={
-            "start_time": start_time.isoformat(),
-            "end_time": (start_time + timedelta(hours=2)).isoformat(),
-        },
+def api_login(app, base_url, admin_user):
+    """
+    1) Logs in as admin and returns a dict containing:
+       - session: an authenticated requests.Session
+       - app: the Flask app instance
+       - base_url: where the web server is listening
+    2) Does NOT create any meeting/election/checkin.
+       Those will be created per-test (admin_meeting, user_meeting).
+    """
+    sess = requests.Session()
+    login_resp = sess.post(
+        f"{base_url}/admin/login",
+        data={"password": admin_user},
+        allow_redirects=True,
     )
-    assert meeting_response.status_code == 201
-    # get the meeting id out of the json response
-    meeting_json = meeting_response.json()
-    meeting_id = meeting_json["meeting_id"]
-    meeting_code = meeting_json["meeting_code"]
-    election_response = s.post(
-        f"{base_url}/api/admin/meetings/{meeting_id}/elections", json={"name": "Test"}
+    assert login_resp.status_code == 200
+
+    return {
+        "session": sess,
+        "app": app,
+        "base_url": base_url,
+    }
+
+
+@pytest.fixture
+def admin_meeting(api_login):
+    """
+    Creates one meeting and election for admin tests. Returns:
+      {
+        "session":      requests.Session(),
+        "meeting_id":   int,
+        "meeting_code": str,
+        "election_id":  int
+      }
+    """
+    s = api_login["session"]
+    base = api_login["base_url"]
+    tz = api_login["app"].config["TZ"]
+
+    # 1) Create a new meeting
+    now = datetime.now(tz)
+    meeting_payload = {
+        "start_time": now.isoformat(),
+        "end_time": (now + timedelta(hours=2)).isoformat(),
+    }
+    m_resp = s.post(
+        f"{base}/api/admin/meetings",
+        json=meeting_payload,
     )
-    assert election_response.status_code == 201
-    # get the election id from the election response
-    election_id = election_response.json()["election_id"]
-    # 3) Check in as a user
-    checkin_response = s.post(
-        f"{base_url}/api/meetings/{meeting_id}/checkins",
-        json={"meeting_code": meeting_code},
+    m_resp.raise_for_status()
+    m_data = m_resp.json()
+    mid = m_data["meeting_id"]
+    mcode = m_data["meeting_code"]
+
+    # 2) Create exactly one election on that meeting
+    e_resp = s.post(
+        f"{base}/api/admin/meetings/{mid}/elections",
+        json={"name": "Admin Test Election"},
     )
-    assert checkin_response.status_code == 200
-    # get the checkin token from the checkin response
-    checkin_token = checkin_response.json()["token"]
-    # 4) Vote in the election
-    s.post(
-        f"{base_url}/api/meetings/{meeting_id}/elections/{election_id}/votes",
-        json={"token": checkin_token, "vote": "F"},
-    )
+    e_resp.raise_for_status()
+    e_data = e_resp.json()
+    eid = e_data["election_id"]
+
     return {
         "session": s,
-        "meeting_id": meeting_id,
-        "meeting_code": meeting_code,
-        "election_id": election_id,
-        "checkin_token": checkin_token,
+        "meeting_id": mid,
+        "meeting_code": mcode,
+        "election_id": eid,
+    }
+
+
+@pytest.fixture
+def user_meeting(api_login):
+    """
+    Creates a separate meeting + election for user-flow tests. Returns:
+      {
+        "session":      requests.Session(),
+        "meeting_id":   int,
+        "meeting_code": str,
+        "election_id":  int
+      }
+    """
+    s = api_login["session"]
+    base = api_login["base_url"]
+    tz = api_login["app"].config["TZ"]
+
+    # 1) Create a new meeting
+    now = datetime.now(tz)
+    meeting_payload = {
+        "start_time": now.isoformat(),
+        "end_time": (now + timedelta(hours=2)).isoformat(),
+    }
+    m_resp = s.post(
+        f"{base}/api/admin/meetings",
+        json=meeting_payload,
+    )
+    m_resp.raise_for_status()
+    m_data = m_resp.json()
+    mid = m_data["meeting_id"]
+    mcode = m_data["meeting_code"]
+
+    # 2) Create exactly one election on that meeting
+    e_resp = s.post(
+        f"{base}/api/admin/meetings/{mid}/elections",
+        json={"name": "User Test Election"},
+    )
+    e_resp.raise_for_status()
+    e_data = e_resp.json()
+    eid = e_data["election_id"]
+
+    return {
+        "session": s,
+        "meeting_id": mid,
+        "meeting_code": mcode,
+        "election_id": eid,
     }
 
 

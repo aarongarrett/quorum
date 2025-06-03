@@ -302,7 +302,7 @@ Admin Dashboard
     {% endfor %}
 
     <!-- Delete Meeting Confirmation Modal -->
-    <div class="modal fade" id="deleteMeetingModal" tabindex="-1" aria-labelledby="deleteMeetingModalLabel" aria-hidden="true">
+    <div class="modal fade" id="deleteMeetingModal" tabindex="-1" aria-labelledby="deleteMeetingModalLabel" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -325,7 +325,7 @@ Admin Dashboard
     </div>
 
     <!-- Delete Election Confirmation Modal -->
-    <div class="modal fade" id="deleteElectionModal" tabindex="-1" aria-labelledby="deleteElectionModalLabel" aria-hidden="true">
+    <div class="modal fade" id="deleteElectionModal" tabindex="-1" aria-labelledby="deleteElectionModalLabel" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -346,7 +346,6 @@ Admin Dashboard
             </div>
         </div>
     </div>
-    <div id="deleteOverlay" class="delete-overlay"></div>
 
 {% endblock %}
 

@@ -21,4 +21,10 @@ def create_app(config_name: str = "default") -> Flask:
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(public_bp)  # home, checkin, vote, etc.
+
+    if app.config.get("TESTING", False):
+        from .blueprints.test_helpers import test_bp
+
+        app.register_blueprint(test_bp)
+
     return app

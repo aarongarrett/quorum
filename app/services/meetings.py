@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func
+from sqlalchemy import func, tuple_
 from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.orm import Session, joinedload
 
@@ -230,7 +230,21 @@ def get_available_meetings(
         .all()
     )
 
-    # 2) Bulk‐fetch all votes for those tokens in one go
+    # 2) Verify that each provided token is valid for its claimed meeting
+    if vote_tokens:
+        valid_checkins = set(
+            db.query(Checkin.meeting_id, Checkin.vote_token)
+            .filter(
+                tuple_(Checkin.meeting_id, Checkin.vote_token).in_(
+                    list(vote_tokens.items())
+                )
+            )
+            .all()
+        )
+    else:
+        valid_checkins = set()
+
+    # 3) Bulk‐fetch all votes for those tokens in one go
     #    (So we don’t do one query per election per meeting)
     rows = (
         db.query(ElectionVote.election_id, ElectionVote.vote, ElectionVote.vote_token)
@@ -243,7 +257,7 @@ def get_available_meetings(
     result = []
     for m in active:
         token = vote_tokens.get(m.id)
-        checked_in = token is not None
+        checked_in = token is not None and (m.id, token) in valid_checkins
 
         elect_list = []
         for e in m.elections:

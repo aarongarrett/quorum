@@ -1,6 +1,153 @@
+import json
+import time
 from datetime import datetime, timedelta, timezone
 
+from app.models import Checkin, Election, ElectionVote
 from app.services import checkin, create_meeting
+
+
+def test_api_meetings_get_checked_in_status(client, db_connection, app):
+    """Test GET /api/meetings reflects check-in status based on session"""
+    # 1. Create a test meeting and check-in
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+
+    election = Election(meeting_id=meeting_id, name="Test Election")
+    db_connection.add(election)
+    db_connection.flush()
+
+    # Perform check-in to obtain token
+    token = checkin(db_connection, meeting_id, meeting_code)
+
+    # Manually store the token in session to simulate a user with a valid token
+    with client.session_transaction() as sess:
+        sess["meeting_tokens"] = {meeting_id: token}
+
+    # 2. Call GET /api/meetings
+    response = client.get("/api/meetings")
+    assert response.status_code == 200
+    data = response.get_json()
+
+    # 3. Verify the meeting is present and marked as checked_in
+    matching = [m for m in data if m["id"] == meeting_id]
+    assert matching, "Meeting should be returned"
+    assert matching[0]["checked_in"] is True
+    assert isinstance(matching[0]["elections"], list)
+    assert len(matching[0]["elections"]) == 1
+    assert matching[0]["elections"][0]["id"] == election.id
+
+
+def test_api_meetings_post_with_token_map(client, db_connection, app):
+    """Test POST /api/meetings accepts token map and returns elections if valid"""
+    # 1. Create meeting and check-in
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+
+    election = Election(meeting_id=meeting_id, name="Test Election")
+    db_connection.add(election)
+    db_connection.flush()
+
+    # Perform check-in to obtain token
+    token = checkin(db_connection, meeting_id, meeting_code)
+
+    # 2. POST to /api/meetings with the token
+    response = client.post("/api/meetings", json={str(meeting_id): token})
+    assert response.status_code == 200
+    data = response.get_json()
+
+    # 3. Verify returned meeting reflects the token-based access
+    matching = [m for m in data if m["id"] == meeting_id]
+    assert matching, "Meeting should be returned"
+    assert matching[0]["checked_in"] is True
+    assert isinstance(matching[0]["elections"], list)
+    assert len(matching[0]["elections"]) == 1
+    assert matching[0]["elections"][0]["id"] == election.id
+
+
+def test_api_meetings_post_with_invalid_token_map(client, db_connection, app):
+    """Test POST /api/meetings accepts token map and returns elections if valid"""
+    # 1. Create meeting and check-in
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+
+    # Perform check-in to obtain token
+    token = checkin(db_connection, meeting_id, meeting_code)
+
+    # 2. POST to /api/meetings with the invalid token map
+    response = client.post("/api/meetings", json={str("Invalid ID"): token})
+    assert response.status_code == 400
+    data = response.get_json()
+
+    # 3. Verify returned meeting reflects the token-based access
+    assert "error" in data
+    assert data["error"] == "Invalid token map"
+
+
+def test_api_meetings_wrong_token_for_meeting(client, db_connection, app):
+    """Token issued for Meeting A should not allow access to Meeting B"""
+    # Create two meetings
+    now = datetime.now(app.config["TZ"])
+    m1_id, m1_code = create_meeting(db_connection, now, now + timedelta(hours=1))
+    m2_id, m2_code = create_meeting(db_connection, now, now + timedelta(hours=1))
+
+    # Check in to Meeting A
+    token = checkin(db_connection, m1_id, m1_code)
+
+    # POST to /api/meetings with token for wrong meeting
+    response = client.post("/api/meetings", json={str(m2_id): token})
+    assert response.status_code == 200
+    data = response.get_json()
+
+    # Meeting B should be listed, but marked as not checked in
+    match = [m for m in data if m["id"] == m2_id]
+    assert match, "Meeting B should be returned"
+    assert match[0]["checked_in"] is False
+
+
+def test_api_meetings_invalid_token(client, db_connection, app):
+    """Invalid token should not grant access"""
+    # Create a meeting
+    now = datetime.now(app.config["TZ"])
+    meeting_id, meeting_code = create_meeting(
+        db_connection, now, now + timedelta(hours=1)
+    )
+
+    # Use a made-up token
+    fake_token = "INVALID8"
+
+    # POST with invalid token
+    response = client.post("/api/meetings", json={str(meeting_id): fake_token})
+    assert response.status_code == 200
+    data = response.get_json()
+
+    match = [m for m in data if m["id"] == meeting_id]
+    assert match, "Meeting should be returned"
+    assert match[0]["checked_in"] is False
+
+
+def test_api_meetings_no_elections(client, db_connection, app):
+    """Meeting with no elections should still return empty elections list"""
+    # Create meeting and check in
+    now = datetime.now(app.config["TZ"])
+    meeting_id, meeting_code = create_meeting(
+        db_connection, now, now + timedelta(hours=1)
+    )
+
+    token = checkin(db_connection, meeting_id, meeting_code)
+
+    # POST with valid token
+    response = client.post("/api/meetings", json={str(meeting_id): token})
+    assert response.status_code == 200
+    data = response.get_json()
+
+    match = [m for m in data if m["id"] == meeting_id]
+    assert match, "Meeting should be returned"
+    assert match[0]["checked_in"] is True
+    assert isinstance(match[0]["elections"], list)
+    assert len(match[0]["elections"]) == 0
 
 
 def test_api_checkin_success(client, db_connection, app):
@@ -22,8 +169,6 @@ def test_api_checkin_success(client, db_connection, app):
     assert len(response.json["token"]) > 0
 
     # Verify the check-in was recorded in the database
-    from app.models import Checkin
-
     checkin = (
         db_connection.query(Checkin)
         .filter(
@@ -131,76 +276,105 @@ def test_api_checkin_server_error(client, db_connection, monkeypatch, app):
     assert "Database error" in response.json["error"]
 
 
-def test_user_stream_sse(client, db_connection, monkeypatch):
-    import json
-    import time
+def test_api_vote_success(client, db_connection, app):
+    """Test successful vote submission via API"""
+    # Create a test meeting and election
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
 
-    tz = timezone.utc
-    now = datetime.now(tz)
-    m1_id, m1_code = create_meeting(
-        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
-    )
-    m2_id, m2_code = create_meeting(
-        db_connection, now - timedelta(hours=3), now - timedelta(hours=2)
-    )
-
-    chk_token = checkin(db_connection, m1_id, m1_code)
-    client.set_cookie(f"meeting_{m1_id}", chk_token)
-
-    monkeypatch.setattr(time, "sleep", lambda s: None)
-
-    # 3) Hit the stream
-    resp = client.get("/api/meetings/stream")
-    assert resp.status_code == 200
-
-    # 4) Pull first chunk
-    first = next(resp.response)
-    data = json.loads(first.split(b"data: ", 1)[1])
-    # should only include meeting 1
-    assert isinstance(data, list)
-    ids = [m["id"] for m in data]
-    assert m1_id in ids and m2_id not in ids
-    assert data[0]["checked_in"]
-    assert len(data[0]["elections"]) == 0
-
-
-def test_admin_stream_sse(client, db_connection, monkeypatch, app):
-    import json
-    import time
-
-    from app.models import Election, ElectionVote
-
-    # seed an admin session
-    with client.session_transaction() as sess:
-        sess["is_admin"] = True
-
-    now = datetime.now(timezone.utc)
-    m_id, _ = create_meeting(
-        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
-    )
-    # create an election and some votes
-    election = Election(meeting_id=m_id, name="Test")
+    # Create an election
+    election = Election(meeting_id=meeting_id, name="Test Election")
     db_connection.add(election)
     db_connection.flush()
-    # cast votes
-    for i, opt in enumerate(["A", "B", "A"]):
-        db_connection.add(
-            ElectionVote(election_id=election.id, vote=opt, vote_token=f"T{i}")
-        )
-    db_connection.commit()
 
-    monkeypatch.setattr(time, "sleep", lambda s: None)
+    # Create a check-in to get a valid token
+    token = checkin(db_connection, meeting_id, meeting_code)
 
-    resp = client.get("/api/admin/meetings/stream")
-    assert resp.status_code == 200
-    chunk = next(resp.response)
-    data = json.loads(chunk.split(b"data: ", 1)[1])
-    # data should be a list of meeting summaries
-    summary = next(m for m in data if m["id"] == m_id)
-    assert summary["checkins"] == 0  # no checkins in this example
-    assert summary["elections"][0]["total_votes"] == 3
-    assert summary["elections"][0]["votes"]["A"] == 2
-    assert summary["elections"][0]["votes"]["B"] == 1
+    response = client.post(
+        f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
+        json={"token": token, "vote": "E"},
+    )
+
+    assert response.status_code == 200
+    assert response.json == {"success": True}
+
+
+def test_api_vote_invalid_token(client, db_connection, app):
+    """Test vote submission with invalid token"""
+    # Create a test meeting and election
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+
+    election = Election(meeting_id=meeting_id, name="Test Election")
+    db_connection.add(election)
+    db_connection.flush()
+
+    response = client.post(
+        f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
+        json={"token": "invalid-token", "vote": "C"},
+    )
+
+    assert response.status_code == 404
+    assert "error" in response.json
+
+
+def test_api_vote_missing_fields(client):
+    """Test vote submission with missing required fields"""
+    response = client.post(
+        "/api/meetings/1/elections/1/votes",
+        json={"token": "test-token"},  # Missing vote
+    )
+    assert response.status_code == 400
+
+    response = client.post(
+        "/api/meetings/1/elections/1/votes", json={"vote": "A"}  # Missing token
+    )
+    assert response.status_code == 400
+
+
+def test_api_login_success(client, app):
+    """Test successful login via API"""
+    with client.session_transaction() as sess:
+        sess["is_admin"] = False
+
+    response = client.post(
+        "/api/login", json={"password": app.config["ADMIN_PASSWORD"]}
+    )
+
+    assert response.status_code == 200
+    assert "success" in response.json
+    with client.session_transaction() as sess:
+        assert sess["is_admin"] is True
+
+
+def test_api_login_no_password(client, app):
+    """Test successful login via API"""
+    with client.session_transaction() as sess:
+        sess["is_admin"] = False
+
+    response = client.post("/api/login", json={"pwd": app.config["ADMIN_PASSWORD"]})
+
+    assert response.status_code == 400
+    assert "error" in response.json
+    assert response.json["error"] == "Password is required"
+    with client.session_transaction() as sess:
+        assert sess["is_admin"] is False
+
+
+def test_api_login_wrong_password(client, app):
+    """Test successful login via API"""
+    with client.session_transaction() as sess:
+        sess["is_admin"] = False
+
+    response = client.post("/api/login", json={"password": "INVALID_PWD"})
+
+    assert response.status_code == 400
+    assert "error" in response.json
+    assert response.json["error"] == "Invalid password"
+    with client.session_transaction() as sess:
+        assert sess["is_admin"] is False
 
 
 def test_api_create_meeting_success(client, app):
@@ -270,6 +444,40 @@ def test_api_create_election_success(client, db_connection, app):
     assert isinstance(response.json["election_id"], int)
 
 
+def test_api_create_election_unauthorized(client, db_connection, app):
+    """Test election creation without admin privileges"""
+    # Create a test meeting
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    response = client.post(
+        f"/api/admin/meetings/{meeting_id}/elections",
+        json={"name": "Test Election"},
+    )
+    assert response.status_code == 403
+    assert "error" in response.json
+    assert "Unauthorized" in response.json["error"]
+
+
+def test_api_create_election_missing_name(client, db_connection, app):
+    """Test successful election creation via API"""
+    # Create a test meeting
+    start_time = datetime.now(app.config["TZ"])
+    end_time = start_time + timedelta(hours=2)
+    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+
+    with client.session_transaction() as sess:
+        sess["is_admin"] = True
+
+    response = client.post(
+        f"/api/admin/meetings/{meeting_id}/elections", json={"name": ""}
+    )
+
+    assert response.status_code == 400
+    assert "error" in response.json
+    assert "Name is required and must not be empty" in response.json["error"]
+
+
 def test_api_create_election_invalid_meeting(client):
     """Test election creation for non-existent meeting"""
     with client.session_transaction() as sess:
@@ -279,67 +487,71 @@ def test_api_create_election_invalid_meeting(client):
         "/api/admin/meetings/999999/elections", json={"name": "Test Election"}
     )
 
-    assert response.status_code == 500  # or 404, depending on implementation
+    assert response.status_code == 500
 
 
-def test_api_vote_success(client, db_connection, app):
-    """Test successful vote submission via API"""
-    # Create a test meeting and election
-    start_time = datetime.now(app.config["TZ"])
-    end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+def test_user_stream_sse(client, db_connection, monkeypatch):
+    import json
+    import time
 
-    # Create an election
-    from app.models import Election
+    tz = timezone.utc
+    now = datetime.now(tz)
+    m1_id, m1_code = create_meeting(
+        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
+    )
+    m2_id, m2_code = create_meeting(
+        db_connection, now - timedelta(hours=3), now - timedelta(hours=2)
+    )
 
-    election = Election(meeting_id=meeting_id, name="Test Election")
+    chk_token = checkin(db_connection, m1_id, m1_code)
+    client.set_cookie(f"meeting_{m1_id}", chk_token)
+
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    # 3) Hit the stream
+    resp = client.get("/api/meetings/stream")
+    assert resp.status_code == 200
+
+    # 4) Pull first chunk
+    first = next(resp.response)
+    data = json.loads(first.split(b"data: ", 1)[1])
+    # should only include meeting 1
+    assert isinstance(data, list)
+    ids = [m["id"] for m in data]
+    assert m1_id in ids and m2_id not in ids
+    assert data[0]["checked_in"]
+    assert len(data[0]["elections"]) == 0
+
+
+def test_admin_stream_sse(client, db_connection, monkeypatch, app):
+    # seed an admin session
+    with client.session_transaction() as sess:
+        sess["is_admin"] = True
+
+    now = datetime.now(timezone.utc)
+    m_id, _ = create_meeting(
+        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
+    )
+    # create an election and some votes
+    election = Election(meeting_id=m_id, name="Test")
     db_connection.add(election)
     db_connection.flush()
+    # cast votes
+    for i, opt in enumerate(["A", "B", "A"]):
+        db_connection.add(
+            ElectionVote(election_id=election.id, vote=opt, vote_token=f"T{i}")
+        )
+    db_connection.commit()
 
-    # Create a check-in to get a valid token
-    token = checkin(db_connection, meeting_id, meeting_code)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
 
-    response = client.post(
-        f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
-        json={"token": token, "vote": "E"},
-    )
-
-    assert response.status_code == 200
-    assert response.json == {"success": True}
-
-
-def test_api_vote_invalid_token(client, db_connection, app):
-    """Test vote submission with invalid token"""
-    # Create a test meeting and election
-    from app.models import Election
-
-    # Create a test meeting and election
-    start_time = datetime.now(app.config["TZ"])
-    end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
-
-    election = Election(meeting_id=meeting_id, name="Test Election")
-    db_connection.add(election)
-    db_connection.flush()
-
-    response = client.post(
-        f"/api/meetings/{meeting_id}/elections/{election.id}/votes",
-        json={"token": "invalid-token", "vote": "C"},
-    )
-
-    assert response.status_code == 404
-    assert "error" in response.json
-
-
-def test_api_vote_missing_fields(client):
-    """Test vote submission with missing required fields"""
-    response = client.post(
-        "/api/meetings/1/elections/1/votes",
-        json={"token": "test-token"},  # Missing vote
-    )
-    assert response.status_code == 400
-
-    response = client.post(
-        "/api/meetings/1/elections/1/votes", json={"vote": "A"}  # Missing token
-    )
-    assert response.status_code == 400
+    resp = client.get("/api/admin/meetings/stream")
+    assert resp.status_code == 200
+    chunk = next(resp.response)
+    data = json.loads(chunk.split(b"data: ", 1)[1])
+    # data should be a list of meeting summaries
+    summary = next(m for m in data if m["id"] == m_id)
+    assert summary["checkins"] == 0  # no checkins in this example
+    assert summary["elections"][0]["total_votes"] == 3
+    assert summary["elections"][0]["votes"]["A"] == 2
+    assert summary["elections"][0]["votes"]["B"] == 1

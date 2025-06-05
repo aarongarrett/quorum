@@ -1,0 +1,11 @@
+FROM locustio/locust:2.37.7
+
+WORKDIR /mnt/locust
+
+COPY requirements/locust.txt ./
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r locust.txt
+
+COPY locustfile.py /mnt/locust
+
+ENTRYPOINT ["locust", "-f", "locustfile.py", "--host=http://web:5000"]

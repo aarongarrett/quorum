@@ -1,13 +1,15 @@
 services:
   web:
-    build: .
-    command: flask run --host=0.0.0.0 --port=5000
+    build: 
+      context: .
+      dockerfile: Dockerfile.web
     environment:
       FLASK_APP: run.py
       FLASK_ENV: production
       DATABASE_URL: postgresql://postgres:pgadminpwd@db:5432/quorum_prod
     volumes:
       - .:/app
+    command: ["run", "--host=0.0.0.0", "--port=5000"]
     ports:
       - "5000:5000"
     depends_on:
@@ -16,10 +18,11 @@ services:
 
   db:
     image: postgres:15-alpine
+    restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pgadminpwd
-      POSTGRES_DB:   quorum_prod
+      POSTGRES_DB: quorum_prod
     ports:
       - "5432:5432"
     volumes:

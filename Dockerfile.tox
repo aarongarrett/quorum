@@ -1,0 +1,23 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        chromium \
+        chromium-driver \
+        libglib2.0-0 \
+        libnss3 \
+        libgdk-pixbuf2.0-0 \
+        libgtk-3-0 \
+        && rm -rf /var/lib/apt/lists/*      
+
+COPY requirements/base.txt requirements/dev.txt ./
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r dev.txt
+
+COPY . /app
+
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["sh", "-c", "tox && tail -f /dev/null"]

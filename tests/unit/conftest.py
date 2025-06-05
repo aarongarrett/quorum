@@ -34,7 +34,7 @@ def db_connection(app):
 
     # Drop and re-create all tables so that the schema is fresh.
     # (If you're already running Alembic migrations, replace this
-    #  with an `alembic upgrade head` or similar.)
+    #  with an alembic upgrade head or similar.)
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
@@ -50,8 +50,3 @@ def db_connection(app):
     SessionLocal.remove()  # expires & closes the SessionLocal
     transaction.rollback()  # undoes all writes
     connection.close()  # returns this connection to the pool
-
-    # (Optional) if you want a completely "empty" schema for the next test,
-    # you could drop_all/create_all again here. But because we rolled back
-    # the top‑level transaction, the DB is still as it was after step 2,
-    # so normally you don't need to do it again.

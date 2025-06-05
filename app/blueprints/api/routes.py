@@ -74,6 +74,44 @@ def create_election_api(meeting_id: int) -> tuple[FlaskResponse, int]:
             return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/meetings", methods=["GET", "POST"])
+def meetings_api() -> tuple[FlaskResponse, int]:
+    """API endpoint to get available meetings"""
+    vote_tokens = {}
+    if request.method == "POST":
+        # API-driven path
+        try:
+            vote_tokens = {int(k): v for k, v in request.get_json().items()}
+        except Exception:
+            return jsonify({"error": "Invalid token map"}), 400
+    else:
+        cookies = dict(request.cookies)
+        meeting_tokens = session.get("meeting_tokens", {})
+
+        # Get tokens from cookies
+        vote_tokens = {}
+        for key, val in cookies.items():
+            try:
+                if key.startswith("meeting_"):
+                    meeting_id = int(key.split("_", 1)[1])
+                    vote_tokens[meeting_id] = val
+            except (IndexError, ValueError):
+                continue  # skip malformed cookie
+
+        # In case a cookie was cleared, take tokens from the session
+        meeting_tokens = {int(k): v for k, v in meeting_tokens.items()}
+        vote_tokens.update(meeting_tokens)
+
+    try:
+        tz = current_app.config["TZ"]
+        meetings = []
+        with session_scope() as db:
+            meetings = get_available_meetings(db, vote_tokens, tz)
+        return jsonify(meetings), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/meetings/<int:meeting_id>/checkins", methods=["POST"])
 def checkin_api(meeting_id: int) -> tuple[FlaskResponse, int]:
     """API endpoint to check in to a meeting"""
@@ -153,13 +191,19 @@ def user_stream_api():
     meeting_tokens = session.get("meeting_tokens", {})
 
     # Get tokens from cookies
-    vote_tokens = {
-        int(key.split("_", 1)[1]): val
-        for key, val in cookies.items()
-        if key.startswith("meeting_")
-    }
+    vote_tokens = {}
+    for key, val in cookies.items():
+        try:
+            if key.startswith("meeting_"):
+                meeting_id = int(key.split("_", 1)[1])
+                vote_tokens[meeting_id] = val
+        except (IndexError, ValueError):
+            continue  # skip malformed cookie
+
     # In case a cookie was cleared, take tokens from the session
+    meeting_tokens = {int(k): v for k, v in meeting_tokens.items()}
     vote_tokens.update(meeting_tokens)
+
     tz = current_app.config["TZ"]
 
     def event_stream():

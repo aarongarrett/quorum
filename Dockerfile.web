@@ -2,10 +2,16 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements/base.txt ./
+COPY requirements/base.txt ./requirements/base.txt
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r base.txt
+    pip install --no-cache-dir -r ./requirements/base.txt && \
+    pip install gunicorn gevent
 
-COPY . /app
+COPY app/ ./app/
+COPY config.py ./config.py
+COPY run.py ./run.py
 
-ENTRYPOINT ["flask"]
+ENV FLASK_ENV=production
+ENV GUNICORN_CMD_ARGS="--bind 0.0.0.0:5000 --workers=4 --worker-class=gevent"
+
+CMD ["gunicorn", "run:create_app('production')"]

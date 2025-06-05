@@ -1,48 +1,60 @@
 services:
   web:
     environment:
-      FLASK_APP: run.py
       FLASK_ENV: testing
-      DATABASE_URL: postgresql://postgres:testpwd@db:5432/quorum_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespwd
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: quorum_test
+      DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum_test
+    volumes:
+      - .:/app
+    command: flask run --host=0.0.0.0 --port=5000
 
   db:
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: testpwd
+      POSTGRES_PASSWORD: postgrespwd
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
       POSTGRES_DB: quorum_test
+      DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum_test
+
+  tox:
+    build:
+      context: .
+      dockerfile: Dockerfile.tox
+    environment:
+      FLASK_ENV: testing
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespwd
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: quorum_test
+      DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum_test
+      BASE_URL: http://web:5000
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+    tty: true
+    stdin_open: true
     volumes:
-      - pgdata_test:/var/lib/postgresql/data
+      - .:/app
+    depends_on:
+      - db
+      - web
+      - selenium
 
   selenium:
     image: selenium/standalone-chrome:117.0
     ports:
       - "4444:4444"
 
-  tox:
-    build: 
-      context: .
-      dockerfile: Dockerfile.tox
-    working_dir: /app
-    tty: true
-    stdin_open: true
-    environment:
-      FLASK_ENV: testing
-      BASE_URL: http://web:5000
-      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
-      DATABASE_URL: postgresql://postgres:testpwd@db:5432/quorum_test
-    volumes:
-      - .:/app
-    depends_on:
-      - web
-      - selenium
-      - db
-
   locust:
     build:
       context: .
       dockerfile: Dockerfile.locust
     ports:
-      - "8089:8089"  # exposes Locust web UI at http://localhost:8089
+      - "8089:8089"
     volumes:
       - .:/mnt/locust
     working_dir: /mnt/locust
@@ -53,5 +65,5 @@ services:
       - web
     tty: true
 
-volumes:
-  pgdata_test:
+
+

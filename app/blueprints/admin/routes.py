@@ -20,10 +20,10 @@ from app.services.meetings import get_all_meetings
 
 from ...database import session_scope
 from ...services import (
-    create_election,
     create_meeting,
-    delete_election,
+    create_poll,
     delete_meeting,
+    delete_poll,
     generate_qr_code,
     get_meeting,
 )
@@ -126,8 +126,8 @@ def meeting_delete_ui(meeting_id):
     return redirect(url_for("admin.dashboard_ui"))
 
 
-@admin_bp.route("/meetings/<int:meeting_id>/elections", methods=["GET", "POST"])
-def election_create_ui(meeting_id):
+@admin_bp.route("/meetings/<int:meeting_id>/polls", methods=["GET", "POST"])
+def poll_create_ui(meeting_id):
     resp = _require_admin()
     if resp:
         return resp
@@ -135,18 +135,18 @@ def election_create_ui(meeting_id):
         try:
             name = request.form["name"]
             with session_scope() as db:
-                create_election(db, meeting_id, name)
-            flash(f'Election created (name: "{name}")', "success")
+                create_poll(db, meeting_id, name)
+            flash(f'Poll created (name: "{name}")', "success")
             return redirect(url_for("admin.dashboard_ui"))
         except Exception as e:
             flash(str(e), "error")
-    return render_template("create_election.html", meeting_id=meeting_id)
+    return render_template("create_poll.html", meeting_id=meeting_id)
 
 
 @admin_bp.route(
-    "/meetings/<int:meeting_id>/elections/<int:election_id>", methods=["POST", "DELETE"]
+    "/meetings/<int:meeting_id>/polls/<int:poll_id>", methods=["POST", "DELETE"]
 )
-def election_delete_ui(meeting_id, election_id):
+def poll_delete_ui(meeting_id, poll_id):
     # If they really sent POST, reject unless it was the override:
     if request.method == "POST":
         if request.form.get("_method", "").upper() != "DELETE":
@@ -156,8 +156,8 @@ def election_delete_ui(meeting_id, election_id):
     if resp:
         return resp
     with session_scope() as db:
-        success = delete_election(db, meeting_id, election_id)
-    flash("Election deleted" if success else "Election not found", "info")
+        success = delete_poll(db, meeting_id, poll_id)
+    flash("Poll deleted" if success else "Poll not found", "info")
     return redirect(url_for("admin.dashboard_ui"))
 
 

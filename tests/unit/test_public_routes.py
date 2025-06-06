@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timedelta
 
-from app.services import checkin, create_election, create_meeting
+from app.services import checkin, create_meeting, create_poll
 
 
 def test_home_route_shows_meetings(client, db_connection, app):
@@ -160,20 +160,20 @@ def test_vote_without_checkin_redirects_home(client, db_connection, app):
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
     meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
-    election_id = create_election(db_connection, meeting_id, "Test Election")
+    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
 
-    response = client.get(f"/meetings/{meeting_id}/elections/{election_id}/votes")
+    response = client.get(f"/meetings/{meeting_id}/polls/{poll_id}/votes")
     assert response.status_code == 302
     assert response.headers["Location"] == "/"
 
 
 def test_vote_page_after_checkin(client, db_connection, app):
-    """Test that the voting page shows available elections after check-in"""
+    """Test that the voting page shows available polls after check-in"""
     # Create test data
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
     meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
-    election_id = create_election(db_connection, meeting_id, "Test Election")
+    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
 
     # Check in
     vote_token = checkin(db_connection, meeting_id, meeting_code)
@@ -182,10 +182,10 @@ def test_vote_page_after_checkin(client, db_connection, app):
         sess["meeting_tokens"] = {str(meeting_id): vote_token}
 
     # Test voting page loads
-    response = client.get(f"/meetings/{meeting_id}/elections/{election_id}/votes")
+    response = client.get(f"/meetings/{meeting_id}/polls/{poll_id}/votes")
     assert response.status_code == 200
     assert b"Cast your vote" in response.data
-    assert b"Test Election" in response.data
+    assert b"Test Poll" in response.data
 
 
 def test_submit_vote(client, db_connection, app):
@@ -194,7 +194,7 @@ def test_submit_vote(client, db_connection, app):
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
     meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
-    election_id = create_election(db_connection, meeting_id, "Test Election")
+    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
 
     # Check in
     vote_token = checkin(db_connection, meeting_id, meeting_code)
@@ -204,8 +204,8 @@ def test_submit_vote(client, db_connection, app):
 
     # Submit vote
     response = client.post(
-        f"/meetings/{meeting_id}/elections/{election_id}/votes",
-        data={f"election_{election_id}": "A"},
+        f"/meetings/{meeting_id}/polls/{poll_id}/votes",
+        data={f"poll_{poll_id}": "A"},
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -213,12 +213,12 @@ def test_submit_vote(client, db_connection, app):
 
 
 def test_duplicate_vote_prevention(client, db_connection, app):
-    """Test that users cannot vote multiple times in the same election"""
+    """Test that users cannot vote multiple times in the same poll"""
     # Create test data
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
     meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
-    election_id = create_election(db_connection, meeting_id, "Test Election")
+    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
 
     # Check in
     vote_token = checkin(db_connection, meeting_id, meeting_code)
@@ -228,8 +228,8 @@ def test_duplicate_vote_prevention(client, db_connection, app):
 
     # First vote (should succeed)
     response = client.post(
-        f"/meetings/{meeting_id}/elections/{election_id}/votes",
-        data={f"election_{election_id}": "A"},
+        f"/meetings/{meeting_id}/polls/{poll_id}/votes",
+        data={f"poll_{poll_id}": "A"},
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -237,8 +237,8 @@ def test_duplicate_vote_prevention(client, db_connection, app):
 
     # Second vote attempt (should fail)
     response = client.post(
-        f"/meetings/{meeting_id}/elections/{election_id}/votes",
-        data={f"election_{election_id}": "B"},
+        f"/meetings/{meeting_id}/polls/{poll_id}/votes",
+        data={f"poll_{poll_id}": "B"},
         follow_redirects=True,
     )
     assert response.status_code == 200

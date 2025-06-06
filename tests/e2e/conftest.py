@@ -46,7 +46,7 @@ def api_login(app, base_url, admin_user):
        - session: an authenticated requests.Session
        - app: the Flask app instance
        - base_url: where the web server is listening
-    2) Does NOT create any meeting/election/checkin.
+    2) Does NOT create any meeting/poll/checkin.
        Those will be created per-test (admin_meeting, user_meeting).
     """
     sess = requests.Session()
@@ -67,12 +67,12 @@ def api_login(app, base_url, admin_user):
 @pytest.fixture
 def admin_meeting(api_login):
     """
-    Creates one meeting and election for admin tests. Returns:
+    Creates one meeting and poll for admin tests. Returns:
       {
         "session":      requests.Session(),
         "meeting_id":   int,
         "meeting_code": str,
-        "election_id":  int
+        "poll_id":  int
       }
     """
     s = api_login["session"]
@@ -94,32 +94,32 @@ def admin_meeting(api_login):
     mid = m_data["meeting_id"]
     mcode = m_data["meeting_code"]
 
-    # 2) Create exactly one election on that meeting
+    # 2) Create exactly one poll on that meeting
     e_resp = s.post(
-        f"{base}/api/admin/meetings/{mid}/elections",
-        json={"name": "Admin Test Election"},
+        f"{base}/api/admin/meetings/{mid}/polls",
+        json={"name": "Admin Test Poll"},
     )
     e_resp.raise_for_status()
     e_data = e_resp.json()
-    eid = e_data["election_id"]
+    eid = e_data["poll_id"]
 
     return {
         "session": s,
         "meeting_id": mid,
         "meeting_code": mcode,
-        "election_id": eid,
+        "poll_id": eid,
     }
 
 
 @pytest.fixture
 def user_meeting(api_login):
     """
-    Creates a separate meeting + election for user-flow tests. Returns:
+    Creates a separate meeting + poll for user-flow tests. Returns:
       {
         "session":      requests.Session(),
         "meeting_id":   int,
         "meeting_code": str,
-        "election_id":  int
+        "poll_id":  int
       }
     """
     s = api_login["session"]
@@ -141,20 +141,20 @@ def user_meeting(api_login):
     mid = m_data["meeting_id"]
     mcode = m_data["meeting_code"]
 
-    # 2) Create exactly one election on that meeting
+    # 2) Create exactly one poll on that meeting
     e_resp = s.post(
-        f"{base}/api/admin/meetings/{mid}/elections",
-        json={"name": "User Test Election"},
+        f"{base}/api/admin/meetings/{mid}/polls",
+        json={"name": "User Test Poll"},
     )
     e_resp.raise_for_status()
     e_data = e_resp.json()
-    eid = e_data["election_id"]
+    eid = e_data["poll_id"]
 
     return {
         "session": s,
         "meeting_id": mid,
         "meeting_code": mcode,
-        "election_id": eid,
+        "poll_id": eid,
     }
 
 

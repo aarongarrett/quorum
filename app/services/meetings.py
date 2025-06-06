@@ -6,8 +6,8 @@ from sqlalchemy import func, tuple_
 from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Checkin, ElectionVote, Meeting
-from app.services.elections import get_election, get_elections
+from app.models import Checkin, Meeting, PollVote
+from app.services.polls import get_poll, get_polls
 from app.services.utils import make_pronounceable, to_utc
 
 
@@ -21,7 +21,7 @@ def get_meeting(
         meeting_id: ID of the meeting to retrieve
 
     Returns:
-        dict[str, Any]: a dictionary of the meeting/election information
+        dict[str, Any]: a dictionary of the meeting/poll information
     """
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
 
@@ -37,13 +37,13 @@ def get_meeting(
         "end_time": meeting.end_time.astimezone(time_zone),
         "meeting_code": meeting.meeting_code,
         "checkins": db.query(Checkin).filter(Checkin.meeting_id == meeting_id).count(),
-        "elections": [],
+        "polls": [],
     }
 
-    # Get elections for this meeting
-    elections = get_elections(db, meeting.id)
-    for election_id, name in elections.items():
-        result["elections"].append(get_election(db, election_id))
+    # Get polls for this meeting
+    polls = get_polls(db, meeting.id)
+    for poll_id, name in polls.items():
+        result["polls"].append(get_poll(db, poll_id))
 
     return result
 
@@ -131,7 +131,7 @@ def get_all_meetings(db: Session, tz: ZoneInfo) -> list[dict]:
       "end_time":   "ISO8601 string in tz",
       "meeting_code": str,
       "checkins": int,
-      "elections": [
+      "polls": [
         {
           "id": int,
           "name": str,
@@ -145,10 +145,10 @@ def get_all_meetings(db: Session, tz: ZoneInfo) -> list[dict]:
     def to_local_iso(dt: datetime, tz: ZoneInfo) -> str:
         return dt.astimezone(tz).isoformat()
 
-    # 1) fetch meetings + elections
+    # 1) fetch meetings + polls
     meetings = (
         db.query(Meeting)
-        .options(joinedload(Meeting.elections))
+        .options(joinedload(Meeting.polls))
         .order_by(Meeting.start_time.desc())
         .all()
     )
@@ -163,8 +163,8 @@ def get_all_meetings(db: Session, tz: ZoneInfo) -> list[dict]:
 
     # 3) bulk‑compute vote counts
     raw_votes = (
-        db.query(ElectionVote.election_id, ElectionVote.vote, func.count().label("cnt"))
-        .group_by(ElectionVote.election_id, ElectionVote.vote)
+        db.query(PollVote.poll_id, PollVote.vote, func.count().label("cnt"))
+        .group_by(PollVote.poll_id, PollVote.vote)
         .all()
     )
     vote_counts: dict[int, dict[str, int]] = {}
@@ -174,7 +174,7 @@ def get_all_meetings(db: Session, tz: ZoneInfo) -> list[dict]:
     result = []
     for m in meetings:
         elects = []
-        for e in m.elections:
+        for e in m.polls:
             vc = vote_counts.get(e.id, {})
             elects.append(
                 {
@@ -191,7 +191,7 @@ def get_all_meetings(db: Session, tz: ZoneInfo) -> list[dict]:
                 "end_time": to_local_iso(m.end_time, tz),
                 "meeting_code": m.meeting_code,
                 "checkins": checkin_counts.get(m.id, 0),
-                "elections": elects,
+                "polls": elects,
             }
         )
     return result
@@ -209,7 +209,7 @@ def get_available_meetings(
       "end_time":   "ISO8601 string in tz",
       "meeting_code": str,
       "checked_in": bool,
-      "elections": [
+      "polls": [
         {
           "id": int,
           "name": str,
@@ -221,10 +221,10 @@ def get_available_meetings(
     now_utc = datetime.now(timezone.utc)
     window_end = now_utc + timedelta(minutes=15)
 
-    # 1) Bulk fetch only the “active” meetings + their elections
+    # 1) Bulk fetch only the “active” meetings + their polls
     active = (
         db.query(Meeting)
-        .options(joinedload(Meeting.elections))
+        .options(joinedload(Meeting.polls))
         .filter(Meeting.start_time <= window_end, Meeting.end_time >= now_utc)
         .order_by(Meeting.start_time.desc())
         .all()
@@ -245,13 +245,13 @@ def get_available_meetings(
         valid_checkins = set()
 
     # 3) Bulk‐fetch all votes for those tokens in one go
-    #    (So we don’t do one query per election per meeting)
+    #    (So we don’t do one query per poll per meeting)
     rows = (
-        db.query(ElectionVote.election_id, ElectionVote.vote, ElectionVote.vote_token)
-        .filter(ElectionVote.vote_token.in_(vote_tokens.values()))
+        db.query(PollVote.poll_id, PollVote.vote, PollVote.vote_token)
+        .filter(PollVote.vote_token.in_(vote_tokens.values()))
         .all()
     )
-    # pivot into: { (election_id, vote_token) → vote }
+    # pivot into: { (poll_id, vote_token) → vote }
     vote_map = {(eid, token): v for eid, v, token in rows}
 
     result = []
@@ -260,7 +260,7 @@ def get_available_meetings(
         checked_in = token is not None and (m.id, token) in valid_checkins
 
         elect_list = []
-        for e in m.elections:
+        for e in m.polls:
             user_vote = vote_map.get((e.id, token)) if checked_in else None
             elect_list.append({"id": e.id, "name": e.name, "vote": user_vote})
 
@@ -272,7 +272,7 @@ def get_available_meetings(
                 "end_time": m.end_time.astimezone(tz).isoformat(),
                 "meeting_code": m.meeting_code,
                 "checked_in": checked_in,
-                "elections": elect_list,
+                "polls": elect_list,
             }
         )
 

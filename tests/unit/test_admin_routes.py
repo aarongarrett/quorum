@@ -4,7 +4,7 @@ from io import BytesIO
 
 from flask import url_for
 
-from app.services import create_election, create_meeting
+from app.services import create_meeting, create_poll
 from app.utils import strftime
 
 
@@ -180,16 +180,16 @@ def test_admin_dashboard_unauthenticated(authenticated_client):
     assert "/admin/login" in response.headers["Location"]
 
 
-def test_admin_dashboard_displays_meetings_and_elections(
+def test_admin_dashboard_displays_meetings_and_polls(
     authenticated_client, db_connection, app
 ):
-    """Test that the dashboard displays meetings and their elections"""
+    """Test that the dashboard displays meetings and their polls"""
     # Create test data
     start_time = datetime(2025, 5, 4, 11, 00, 0, 0).astimezone(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
     meeting_id, _ = create_meeting(db_connection, start_time, end_time)
-    create_election(db_connection, meeting_id, "Test Election 1")
-    create_election(db_connection, meeting_id, "Test Election 2")
+    create_poll(db_connection, meeting_id, "Test Poll 1")
+    create_poll(db_connection, meeting_id, "Test Poll 2")
 
     # Log in as admin
     with authenticated_client.session_transaction() as sess:
@@ -208,9 +208,9 @@ def test_admin_dashboard_displays_meetings_and_elections(
     assert start_time_str in response.data
     assert end_time_str in response.data
 
-    # Verify elections are displayed
-    assert b"Test Election 1" in response.data
-    assert b"Test Election 2" in response.data
+    # Verify polls are displayed
+    assert b"Test Poll 1" in response.data
+    assert b"Test Poll 2" in response.data
 
 
 def test_admin_dashboard_no_meetings(authenticated_client, db_connection):
@@ -242,9 +242,9 @@ def test_admin_dashboard_multiple_meetings(authenticated_client, db_connection, 
         db_connection, meeting2_start_time, meeting2_end_time
     )
 
-    # Add elections to second meeting
-    create_election(db_connection, meeting2_id, "Future Election 1")
-    create_election(db_connection, meeting2_id, "Future Election 2")
+    # Add polls to second meeting
+    create_poll(db_connection, meeting2_id, "Future Poll 1")
+    create_poll(db_connection, meeting2_id, "Future Poll 2")
 
     # Log in as admin
     with authenticated_client.session_transaction() as sess:
@@ -268,9 +268,9 @@ def test_admin_dashboard_multiple_meetings(authenticated_client, db_connection, 
         assert start_time_str in response.data
         assert end_time_str in response.data
 
-    # Verify elections are displayed for the second meeting
-    assert b"Future Election 1" in response.data
-    assert b"Future Election 2" in response.data
+    # Verify polls are displayed for the second meeting
+    assert b"Future Poll 1" in response.data
+    assert b"Future Poll 2" in response.data
 
 
 def test_meeting_create_form_unauthenticated(authenticated_client):
@@ -388,8 +388,8 @@ def test_meeting_deletion_via_post_without_override(
     assert response.status_code == 405
 
 
-def test_election_create_form_unauthenticated(authenticated_client, db_connection, app):
-    """Test that unauthenticated users cannot access the election creation form"""
+def test_poll_create_form_unauthenticated(authenticated_client, db_connection, app):
+    """Test that unauthenticated users cannot access the poll creation form"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
@@ -400,13 +400,13 @@ def test_election_create_form_unauthenticated(authenticated_client, db_connectio
         sess.clear()
 
     # Try to access the form
-    response = authenticated_client.get(f"/admin/meetings/{meeting_id}/elections")
+    response = authenticated_client.get(f"/admin/meetings/{meeting_id}/polls")
     assert response.status_code == 302
     assert "/admin/login" in response.headers["Location"]
 
 
-def test_election_create_form_authenticated(authenticated_client, db_connection, app):
-    """Test that authenticated admins can access the election creation form"""
+def test_poll_create_form_authenticated(authenticated_client, db_connection, app):
+    """Test that authenticated admins can access the poll creation form"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
@@ -417,14 +417,14 @@ def test_election_create_form_authenticated(authenticated_client, db_connection,
         sess["is_admin"] = True
 
     # Access the form
-    response = authenticated_client.get(f"/admin/meetings/{meeting_id}/elections")
+    response = authenticated_client.get(f"/admin/meetings/{meeting_id}/polls")
     assert response.status_code == 200
-    assert b"Create Election" in response.data
+    assert b"Create Poll" in response.data
     assert b"Name" in response.data
 
 
-def test_election_creation_success(authenticated_client, db_connection, app):
-    """Test creating an election with valid data"""
+def test_poll_creation_success(authenticated_client, db_connection, app):
+    """Test creating an poll with valid data"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
@@ -434,20 +434,20 @@ def test_election_creation_success(authenticated_client, db_connection, app):
     with authenticated_client.session_transaction() as sess:
         sess["is_admin"] = True
 
-    # Create an election
+    # Create an poll
     response = authenticated_client.post(
-        f"/admin/meetings/{meeting_id}/elections",
-        data={"name": "Test Election"},
+        f"/admin/meetings/{meeting_id}/polls",
+        data={"name": "Test Poll"},
         follow_redirects=True,
     )
 
     # Verify response
     assert response.status_code == 200
-    assert b"Election created" in response.data
+    assert b"Poll created" in response.data
 
 
-def test_election_creation_invalid_data(authenticated_client, db_connection, app):
-    """Test creating an election with invalid data"""
+def test_poll_creation_invalid_data(authenticated_client, db_connection, app):
+    """Test creating an poll with invalid data"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
@@ -459,79 +459,79 @@ def test_election_creation_invalid_data(authenticated_client, db_connection, app
 
     # Test with empty name
     response = authenticated_client.post(
-        f"/admin/meetings/{meeting_id}/elections",
+        f"/admin/meetings/{meeting_id}/polls",
         data={"name": ""},
         follow_redirects=True,
     )
     assert response.status_code == 200
-    assert b"Election name cannot be empty" in response.data
+    assert b"Poll name cannot be empty" in response.data
 
 
-def test_election_deletion(authenticated_client, db_connection, app):
-    """Test deleting an existing election"""
-    # Create a test meeting and election
+def test_poll_deletion(authenticated_client, db_connection, app):
+    """Test deleting an existing poll"""
+    # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
     meeting_id, _ = create_meeting(db_connection, start_time, end_time)
 
-    # Create an election
-    election_id = create_election(db_connection, meeting_id, "Test Election")
+    # Create an poll
+    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
         sess["is_admin"] = True
 
-    # Delete the election
+    # Delete the poll
     response = authenticated_client.delete(
-        f"/admin/meetings/{meeting_id}/elections/{election_id}",
+        f"/admin/meetings/{meeting_id}/polls/{poll_id}",
         follow_redirects=True,
     )
     assert response.status_code == 200
-    assert b"Election deleted" in response.data
+    assert b"Poll deleted" in response.data
 
 
-def test_election_deletion_via_post(authenticated_client, db_connection, app):
-    """Test deleting an existing election"""
-    # Create a test meeting and election
+def test_poll_deletion_via_post(authenticated_client, db_connection, app):
+    """Test deleting an existing poll"""
+    # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
     meeting_id, _ = create_meeting(db_connection, start_time, end_time)
 
-    # Create an election
-    election_id = create_election(db_connection, meeting_id, "Test Election")
+    # Create an poll
+    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
         sess["is_admin"] = True
 
-    # Delete the election
+    # Delete the poll
     response = authenticated_client.post(
-        f"/admin/meetings/{meeting_id}/elections/{election_id}",
+        f"/admin/meetings/{meeting_id}/polls/{poll_id}",
         data={"_method": "DELETE"},
         follow_redirects=True,
     )
     assert response.status_code == 200
-    assert b"Election deleted" in response.data
+    assert b"Poll deleted" in response.data
 
 
-def test_election_deletion_via_post_without_override(
+def test_poll_deletion_via_post_without_override(
     authenticated_client, db_connection, app
 ):
-    """Test deleting an existing election"""
-    # Create a test meeting and election
+    """Test deleting an existing poll"""
+    # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
     meeting_id, _ = create_meeting(db_connection, start_time, end_time)
 
-    # Create an election
-    election_id = create_election(db_connection, meeting_id, "Test Election")
+    # Create an poll
+    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
         sess["is_admin"] = True
 
-    # Delete the election
+    # Delete the poll
     response = authenticated_client.post(
-        f"/admin/meetings/{meeting_id}/elections/{election_id}", follow_redirects=True
+        f"/admin/meetings/{meeting_id}/polls/{poll_id}", follow_redirects=True
     )
     assert response.status_code == 405

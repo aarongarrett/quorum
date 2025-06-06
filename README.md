@@ -152,6 +152,3 @@ The application will be available at http://localhost:5000
 - For test failures, check the logs of the selenium container for browser-related issues
 - Use `docker-compose logs` to view application logs
 
-## License
-
-[Specify your license here]

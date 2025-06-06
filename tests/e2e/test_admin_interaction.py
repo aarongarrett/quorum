@@ -56,30 +56,30 @@ def test_create_meeting(browser, base_url, admin_user):
     assert meeting_date.strftime("%B %-d, %Y") in browser.page_source
 
 
-def test_create_election(browser, base_url, admin_user, admin_meeting):
-    """Test creating a new election for a meeting."""
+def test_create_poll(browser, base_url, admin_user, admin_meeting):
+    """Test creating a new poll for a meeting."""
     # Login as admin
     login = AdminLoginPage(browser, base_url + "/admin")
     login.visit("/login")
     login.login(admin_user)
 
     meeting_id = admin_meeting["meeting_id"]
-    # Find the test meeting and click create election
+    # Find the test meeting and click create poll
     WebDriverWait(browser, 5).until(
         EC.presence_of_element_located(
             (By.CSS_SELECTOR, f"[data-meeting-id='{meeting_id}']")
         )
     )
-    create_election_btn = WebDriverWait(browser, 5).until(
+    create_poll_btn = WebDriverWait(browser, 5).until(
         EC.presence_of_element_located(
-            (By.XPATH, ".//a[contains(normalize-space(.), 'Create Election')]")
+            (By.XPATH, ".//a[contains(normalize-space(.), 'Create Poll')]")
         )
     )
-    create_election_btn.click()
+    create_poll_btn.click()
 
-    # Fill out election form
-    election_name = "Test Election " + datetime.now().strftime("%Y-%m-%d %H:%M")
-    browser.find_element(By.NAME, "name").send_keys(election_name)
+    # Fill out poll form
+    poll_name = "Test Poll " + datetime.now().strftime("%Y-%m-%d %H:%M")
+    browser.find_element(By.NAME, "name").send_keys(poll_name)
 
     # Submit form
     browser.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
@@ -87,23 +87,23 @@ def test_create_election(browser, base_url, admin_user, admin_meeting):
     # Verify redirect to dashboard and success message
     WebDriverWait(browser, 5).until(EC.url_contains("/admin/dashboard"))
 
-    assert 'Election created (name: "Test Election' in browser.page_source
+    assert 'Poll created (name: "Test Poll' in browser.page_source
 
-    # Verify election appears in the meeting card
-    assert election_name in browser.page_source
+    # Verify poll appears in the meeting card
+    assert poll_name in browser.page_source
 
 
-def test_delete_election(browser, base_url, admin_user, admin_meeting):
-    """Test deleting an election."""
+def test_delete_poll(browser, base_url, admin_user, admin_meeting):
+    """Test deleting an poll."""
     # Login as admin
     login = AdminLoginPage(browser, base_url + "/admin")
     login.visit("/login")
     login.login(admin_user)
 
-    election_id = admin_meeting["election_id"]
+    poll_id = admin_meeting["poll_id"]
     meeting_id = admin_meeting["meeting_id"]
 
-    # Find the meeting card that contains our election
+    # Find the meeting card that contains our poll
     meeting_card = WebDriverWait(browser, 10).until(
         EC.presence_of_element_located(
             (By.CSS_SELECTOR, f"div[data-meeting-id='{meeting_id}']")
@@ -119,7 +119,7 @@ def test_delete_election(browser, base_url, admin_user, admin_meeting):
     # Wait for the delete button to be clickable and visible in the viewport
     delete_btn = WebDriverWait(browser, 10).until(
         EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, f"button[data-election-id='{election_id}']")
+            (By.CSS_SELECTOR, f"button[data-poll-id='{poll_id}']")
         )
     )
 
@@ -133,7 +133,7 @@ def test_delete_election(browser, base_url, admin_user, admin_meeting):
 
     # Wait for modal to be present in the DOM
     modal = WebDriverWait(browser, 10).until(
-        EC.presence_of_element_located((By.ID, "deleteElectionModal"))
+        EC.presence_of_element_located((By.ID, "deletePollModal"))
     )
 
     # Use JavaScript to ensure modal is visible
@@ -148,7 +148,7 @@ def test_delete_election(browser, base_url, admin_user, admin_meeting):
 
     # Find and click the delete button directly
     delete_btn = browser.find_element(
-        By.CSS_SELECTOR, "#deleteElectionForm button[type='submit']"
+        By.CSS_SELECTOR, "#deletePollForm button[type='submit']"
     )
     delete_btn.click()
 
@@ -158,7 +158,7 @@ def test_delete_election(browser, base_url, admin_user, admin_meeting):
     )
 
     # Verify success message
-    assert "Election deleted" in browser.page_source
+    assert "Poll deleted" in browser.page_source
 
 
 def test_delete_meeting(browser, base_url, admin_user, admin_meeting):

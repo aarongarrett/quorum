@@ -5,21 +5,21 @@ from io import BytesIO
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Checkin, Election, ElectionVote, Meeting
+from app.models import Checkin, Meeting, Poll, PollVote
 from app.services import (
     checkin,
-    create_election,
     create_meeting,
-    delete_election,
+    create_poll,
     delete_meeting,
+    delete_poll,
     generate_qr_code,
-    get_election,
-    get_elections,
     get_meeting,
+    get_poll,
+    get_polls,
     get_user_votes,
     get_vote_counts,
     is_available,
-    vote_in_election,
+    vote_in_poll,
 )
 
 
@@ -225,17 +225,17 @@ def test_delete_meeting_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Add some elections and votes to test cascading deletes
-    election1 = Election(meeting_id=meeting.id, name="Election 1")
-    election2 = Election(meeting_id=meeting.id, name="Election 2")
-    db_connection.add_all([election1, election2])
+    # Add some polls and votes to test cascading deletes
+    poll1 = Poll(meeting_id=meeting.id, name="Poll 1")
+    poll2 = Poll(meeting_id=meeting.id, name="Poll 2")
+    db_connection.add_all([poll1, poll2])
     db_connection.flush()
 
     # Add some votes
     votes = [
-        ElectionVote(election_id=election1.id, vote_token="TOKEN1", vote="A"),
-        ElectionVote(election_id=election1.id, vote_token="TOKEN2", vote="B"),
-        ElectionVote(election_id=election2.id, vote_token="TOKEN1", vote="C"),
+        PollVote(poll_id=poll1.id, vote_token="TOKEN1", vote="A"),
+        PollVote(poll_id=poll1.id, vote_token="TOKEN2", vote="B"),
+        PollVote(poll_id=poll2.id, vote_token="TOKEN1", vote="C"),
     ]
     db_connection.add_all(votes)
 
@@ -262,12 +262,10 @@ def test_delete_meeting_success(db_connection: Session):
 
     # Verify the meeting and all related data was deleted
     assert db_connection.get(Meeting, meeting.id) is None
+    assert db_connection.query(Poll).filter_by(meeting_id=meeting.id).first() is None
     assert (
-        db_connection.query(Election).filter_by(meeting_id=meeting.id).first() is None
-    )
-    assert (
-        db_connection.query(ElectionVote)
-        .filter(ElectionVote.election_id.in_([election1.id, election2.id]))
+        db_connection.query(PollVote)
+        .filter(PollVote.poll_id.in_([poll1.id, poll2.id]))
         .first()
         is None
     )
@@ -289,9 +287,9 @@ def test_delete_nonexistent_meeting(db_connection: Session):
     assert count == original_count
 
 
-def test_delete_meeting_without_elections(db_connection: Session):
-    """Test deleting a meeting that has no elections."""
-    # Create a new meeting with no elections
+def test_delete_meeting_without_polls(db_connection: Session):
+    """Test deleting a meeting that has no polls."""
+    # Create a new meeting with no polls
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -318,8 +316,8 @@ def test_delete_meeting_without_elections(db_connection: Session):
     assert db_connection.query(Checkin).filter_by(meeting_id=meeting.id).first() is None
 
 
-def test_create_election_success(db_connection: Session):
-    """Test successful creation of an election."""
+def test_create_poll_success(db_connection: Session):
+    """Test successful creation of an poll."""
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -328,36 +326,36 @@ def test_create_election_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Test creating a new election
-    new_election_name = "New Test Election"
-    election_id = create_election(db_connection, meeting.id, new_election_name)
+    # Test creating a new poll
+    new_poll_name = "New Test Poll"
+    poll_id = create_poll(db_connection, meeting.id, new_poll_name)
 
-    # Verify the election was created
-    assert isinstance(election_id, int)
-    assert election_id > 0
+    # Verify the poll was created
+    assert isinstance(poll_id, int)
+    assert poll_id > 0
 
-    # Verify the election exists in the database
-    election = db_connection.get(Election, election_id)
-    assert election is not None
-    assert election.name == new_election_name
-    assert election.meeting_id == meeting.id
+    # Verify the poll exists in the database
+    poll = db_connection.get(Poll, poll_id)
+    assert poll is not None
+    assert poll.name == new_poll_name
+    assert poll.meeting_id == meeting.id
 
 
-def test_create_election_nonexistent_meeting(db_connection: Session):
-    """Test creating an election with a non-existent meeting ID."""
+def test_create_poll_nonexistent_meeting(db_connection: Session):
+    """Test creating an poll with a non-existent meeting ID."""
     non_existent_meeting_id = 999999
-    election_name = "Test Nonexistent Election"
+    poll_name = "Test Nonexistent Poll"
 
     with pytest.raises(ValueError, match="Meeting does not exist"):
-        create_election(db_connection, non_existent_meeting_id, election_name)
+        create_poll(db_connection, non_existent_meeting_id, poll_name)
 
-    # Verify no election was created
-    count = db_connection.query(Election).filter_by(name=election_name).count()
+    # Verify no poll was created
+    count = db_connection.query(Poll).filter_by(name=poll_name).count()
     assert count == 0
 
 
-def test_create_election_empty_name(db_connection: Session):
-    """Test creating an election with an empty name."""
+def test_create_poll_empty_name(db_connection: Session):
+    """Test creating an poll with an empty name."""
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -366,12 +364,12 @@ def test_create_election_empty_name(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    with pytest.raises(ValueError, match="Election name cannot be empty"):
-        create_election(db_connection, meeting.id, "")
+    with pytest.raises(ValueError, match="Poll name cannot be empty"):
+        create_poll(db_connection, meeting.id, "")
 
 
-def test_create_election_duplicate_name_same_meeting(db_connection: Session):
-    """Test creating an election with a duplicate name in the same meeting."""
+def test_create_poll_duplicate_name_same_meeting(db_connection: Session):
+    """Test creating an poll with a duplicate name in the same meeting."""
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -380,20 +378,20 @@ def test_create_election_duplicate_name_same_meeting(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    election_name = "Election 1"
-    election1 = Election(meeting_id=meeting.id, name=election_name)
-    db_connection.add(election1)
+    poll_name = "Poll 1"
+    poll1 = Poll(meeting_id=meeting.id, name=poll_name)
+    db_connection.add(poll1)
     db_connection.flush()
 
     # Second creation with same name in same meeting should fail
     with pytest.raises(
-        ValueError, match="An election with this name already exists in this meeting"
+        ValueError, match="An poll with this name already exists in this meeting"
     ):
-        create_election(db_connection, meeting.id, election_name)
+        create_poll(db_connection, meeting.id, poll_name)
 
 
-def test_create_election_same_name_different_meeting(db_connection: Session):
-    """Test creating elections with the same name in different meetings."""
+def test_create_poll_same_name_different_meeting(db_connection: Session):
+    """Test creating polls with the same name in different meetings."""
     meeting1 = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -407,24 +405,24 @@ def test_create_election_same_name_different_meeting(db_connection: Session):
     db_connection.add_all([meeting1, meeting2])
     db_connection.commit()
 
-    election_name = "Same Name Election"
+    poll_name = "Same Name Poll"
 
-    # Create election in first meeting
-    election1_id = create_election(db_connection, meeting1.id, election_name)
-    assert election1_id is not None
+    # Create poll in first meeting
+    poll1_id = create_poll(db_connection, meeting1.id, poll_name)
+    assert poll1_id is not None
 
-    # Create election with same name in second meeting (should succeed)
-    election2_id = create_election(db_connection, meeting2.id, election_name)
-    assert election2_id is not None
-    assert election2_id != election1_id
+    # Create poll with same name in second meeting (should succeed)
+    poll2_id = create_poll(db_connection, meeting2.id, poll_name)
+    assert poll2_id is not None
+    assert poll2_id != poll1_id
 
-    # Verify both elections were created
-    count = db_connection.query(Election).filter_by(name=election_name).count()
+    # Verify both polls were created
+    count = db_connection.query(Poll).filter_by(name=poll_name).count()
     assert count == 2
 
 
-def test_delete_election_success(db_connection: Session):
-    """Test successful deletion of an election."""
+def test_delete_poll_success(db_connection: Session):
+    """Test successful deletion of an poll."""
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -433,32 +431,32 @@ def test_delete_election_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    election_name = "Election 1"
-    election1 = Election(meeting_id=meeting.id, name=election_name)
-    db_connection.add(election1)
+    poll_name = "Poll 1"
+    poll1 = Poll(meeting_id=meeting.id, name=poll_name)
+    db_connection.add(poll1)
     db_connection.commit()
-    election_id = election1.id
+    poll_id = poll1.id
 
     votes = [
-        ElectionVote(election_id=election_id, vote_token="TOKEN1", vote="A"),
-        ElectionVote(election_id=election_id, vote_token="TOKEN2", vote="B"),
+        PollVote(poll_id=poll_id, vote_token="TOKEN1", vote="A"),
+        PollVote(poll_id=poll_id, vote_token="TOKEN2", vote="B"),
     ]
     db_connection.add_all(votes)
     db_connection.commit()
 
-    result = delete_election(db_connection, meeting.id, election_id)
+    result = delete_poll(db_connection, meeting.id, poll_id)
     assert result is True
 
-    # Verify the election was deleted
-    assert db_connection.get(Election, election_id) is None
+    # Verify the poll was deleted
+    assert db_connection.get(Poll, poll_id) is None
 
     # Verify associated votes were deleted
-    count = db_connection.query(ElectionVote).filter_by(election_id=election_id).count()
+    count = db_connection.query(PollVote).filter_by(poll_id=poll_id).count()
     assert count == 0
 
 
-def test_delete_nonexistent_election(db_connection: Session):
-    """Test deleting an election that doesn't exist."""
+def test_delete_nonexistent_poll(db_connection: Session):
+    """Test deleting an poll that doesn't exist."""
     non_existent_id = 999999
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
@@ -468,11 +466,11 @@ def test_delete_nonexistent_election(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Verify the election doesn't exist
-    assert db_connection.get(Election, non_existent_id) is None
+    # Verify the poll doesn't exist
+    assert db_connection.get(Poll, non_existent_id) is None
 
-    # Try to delete the non-existent election
-    result = delete_election(db_connection, meeting.id, non_existent_id)
+    # Try to delete the non-existent poll
+    result = delete_poll(db_connection, meeting.id, non_existent_id)
     assert result is False
 
 
@@ -575,8 +573,8 @@ def test_checkin_duplicate_token(db_connection: Session):
     assert count == 2
 
 
-def test_get_elections_success(db_connection: Session):
-    """Test retrieving the elections for a meeting."""
+def test_get_polls_success(db_connection: Session):
+    """Test retrieving the polls for a meeting."""
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -585,40 +583,40 @@ def test_get_elections_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Add some elections and votes to test cascading deletes
-    election1 = Election(meeting_id=meeting.id, name="Election 1")
-    election2 = Election(meeting_id=meeting.id, name="Election 2")
-    db_connection.add_all([election1, election2])
+    # Add some polls and votes to test cascading deletes
+    poll1 = Poll(meeting_id=meeting.id, name="Poll 1")
+    poll2 = Poll(meeting_id=meeting.id, name="Poll 2")
+    db_connection.add_all([poll1, poll2])
     db_connection.commit()
 
     # Add some votes
     votes = [
-        ElectionVote(election_id=election1.id, vote_token="TOKEN1", vote="A"),
-        ElectionVote(election_id=election1.id, vote_token="TOKEN2", vote="B"),
-        ElectionVote(election_id=election2.id, vote_token="TOKEN1", vote="C"),
+        PollVote(poll_id=poll1.id, vote_token="TOKEN1", vote="A"),
+        PollVote(poll_id=poll1.id, vote_token="TOKEN2", vote="B"),
+        PollVote(poll_id=poll2.id, vote_token="TOKEN1", vote="C"),
     ]
     db_connection.add_all(votes)
     db_connection.commit()
 
-    # Get elections for the test meeting
-    elections = get_elections(db_connection, meeting.id)
+    # Get polls for the test meeting
+    polls = get_polls(db_connection, meeting.id)
 
-    # Should return a dict with two elections as set up in the test database
-    assert isinstance(elections, dict)
-    assert len(elections) == 2
+    # Should return a dict with two polls as set up in the test database
+    assert isinstance(polls, dict)
+    assert len(polls) == 2
 
-    # Verify the election data
+    # Verify the poll data
     count = 0
-    for eid in elections:
-        if eid == election1.id and election1.name == "Election 1":
+    for eid in polls:
+        if eid == poll1.id and poll1.name == "Poll 1":
             count += 1
-        elif eid == election2.id and election2.name == "Election 2":
+        elif eid == poll2.id and poll2.name == "Poll 2":
             count += 1
     assert count == 2
 
 
-def test_get_elections_no_elections(db_connection: Session):
-    """Test retrieving elections for a meeting with no elections."""
+def test_get_polls_no_polls(db_connection: Session):
+    """Test retrieving polls for a meeting with no polls."""
     meeting = Meeting(
         start_time=datetime.now(timezone.utc),
         end_time=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -627,16 +625,16 @@ def test_get_elections_no_elections(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Get elections for the test meeting
-    elections = get_elections(db_connection, meeting.id)
-    assert elections == {}
+    # Get polls for the test meeting
+    polls = get_polls(db_connection, meeting.id)
+    assert polls == {}
 
 
-def test_get_elections_nonexistent_meeting(db_connection: Session):
-    """Test retrieving elections for a non-existent meeting."""
+def test_get_polls_nonexistent_meeting(db_connection: Session):
+    """Test retrieving polls for a non-existent meeting."""
     non_existent_meeting_id = 999999
-    elections = get_elections(db_connection, non_existent_meeting_id)
-    assert elections == {}
+    polls = get_polls(db_connection, non_existent_meeting_id)
+    assert polls == {}
 
 
 def test_get_meeting_success(db_connection: Session):
@@ -664,8 +662,8 @@ def test_get_meeting_nonexistent_meeting(db_connection: Session):
     assert meeting is None
 
 
-def test_get_election_success(db_connection: Session):
-    """Test successfully retrieving an election with votes."""
+def test_get_poll_success(db_connection: Session):
+    """Test successfully retrieving an poll with votes."""
     # Create a meeting
     start_time = datetime.now(timezone.utc)
     end_time = start_time + timedelta(hours=2)
@@ -677,9 +675,9 @@ def test_get_election_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Create an election
-    election = Election(meeting_id=meeting.id, name="Test Election")
-    db_connection.add(election)
+    # Create an poll
+    poll = Poll(meeting_id=meeting.id, name="Test Poll")
+    db_connection.add(poll)
     db_connection.commit()
 
     # Create a check-in and vote
@@ -693,29 +691,29 @@ def test_get_election_success(db_connection: Session):
     db_connection.commit()
 
     # Record a vote
-    vote = ElectionVote(
-        election_id=election.id,
+    vote = PollVote(
+        poll_id=poll.id,
         vote_token=vote_token,
         vote="A",
     )
     db_connection.add(vote)
     db_connection.commit()
 
-    # Test getting the election
-    result = get_election(db_connection, election.id)
+    # Test getting the poll
+    result = get_poll(db_connection, poll.id)
 
     # Verify the result
     assert result is not None
-    assert result["id"] == election.id
-    assert result["name"] == "Test Election"
+    assert result["id"] == poll.id
+    assert result["name"] == "Test Poll"
     assert result["meeting_id"] == meeting.id
     assert isinstance(result["votes"], dict)
     assert result["votes"]["A"] == 1  # One vote for A
     assert result["total_votes"] == 1  # Total votes should be 1
 
 
-def test_get_election_no_votes(db_connection: Session):
-    """Test retrieving an election with no votes."""
+def test_get_poll_no_votes(db_connection: Session):
+    """Test retrieving an poll with no votes."""
     # Create a meeting
     start_time = datetime.now(timezone.utc)
     end_time = start_time + timedelta(hours=2)
@@ -727,18 +725,18 @@ def test_get_election_no_votes(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Create an election
-    election = Election(meeting_id=meeting.id, name="Test Election No Votes")
-    db_connection.add(election)
+    # Create an poll
+    poll = Poll(meeting_id=meeting.id, name="Test Poll No Votes")
+    db_connection.add(poll)
     db_connection.commit()
 
-    # Test getting the election
-    result = get_election(db_connection, election.id)
+    # Test getting the poll
+    result = get_poll(db_connection, poll.id)
 
     # Verify the result
     assert result is not None
-    assert result["id"] == election.id
-    assert result["name"] == "Test Election No Votes"
+    assert result["id"] == poll.id
+    assert result["name"] == "Test Poll No Votes"
     assert result["meeting_id"] == meeting.id
     assert isinstance(result["votes"], dict)
     assert result["total_votes"] == 0  # No votes should be recorded
@@ -747,15 +745,15 @@ def test_get_election_no_votes(db_connection: Session):
         assert result["votes"][option] == 0
 
 
-def test_get_nonexistent_election(db_connection: Session):
-    """Test retrieving a non-existent election."""
-    non_existent_election_id = 999999
-    result = get_election(db_connection, non_existent_election_id)
+def test_get_nonexistent_poll(db_connection: Session):
+    """Test retrieving a non-existent poll."""
+    non_existent_poll_id = 999999
+    result = get_poll(db_connection, non_existent_poll_id)
     assert result is None
 
 
-def test_get_election_with_multiple_votes(db_connection: Session):
-    """Test retrieving an election with multiple votes."""
+def test_get_poll_with_multiple_votes(db_connection: Session):
+    """Test retrieving an poll with multiple votes."""
     # Create a meeting
     start_time = datetime.now(timezone.utc)
     end_time = start_time + timedelta(hours=2)
@@ -767,9 +765,9 @@ def test_get_election_with_multiple_votes(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Create an election
-    election = Election(meeting_id=meeting.id, name="Multi-Vote Election")
-    db_connection.add(election)
+    # Create an poll
+    poll = Poll(meeting_id=meeting.id, name="Multi-Vote Poll")
+    db_connection.add(poll)
     db_connection.commit()
 
     # Create check-ins and votes
@@ -785,8 +783,8 @@ def test_get_election_with_multiple_votes(db_connection: Session):
         db_connection.add(checkin)
         db_connection.flush()  # Flush to get the checkin ID
 
-        vote = ElectionVote(
-            election_id=election.id,
+        vote = PollVote(
+            poll_id=poll.id,
             vote_token=vote_token,
             vote=vote_option,
         )
@@ -794,13 +792,13 @@ def test_get_election_with_multiple_votes(db_connection: Session):
 
     db_connection.commit()
 
-    # Test getting the election
-    result = get_election(db_connection, election.id)
+    # Test getting the poll
+    result = get_poll(db_connection, poll.id)
 
     # Verify the result
     assert result is not None
-    assert result["id"] == election.id
-    assert result["name"] == "Multi-Vote Election"
+    assert result["id"] == poll.id
+    assert result["name"] == "Multi-Vote Poll"
     assert result["meeting_id"] == meeting.id
     assert result["total_votes"] == 6  # Total votes should be 6
 
@@ -825,10 +823,10 @@ def test_get_user_votes_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Add some elections and votes to test cascading deletes
-    election1 = Election(meeting_id=meeting.id, name="Election 1")
-    election2 = Election(meeting_id=meeting.id, name="Election 2")
-    db_connection.add_all([election1, election2])
+    # Add some polls and votes to test cascading deletes
+    poll1 = Poll(meeting_id=meeting.id, name="Poll 1")
+    poll2 = Poll(meeting_id=meeting.id, name="Poll 2")
+    db_connection.add_all([poll1, poll2])
     db_connection.flush()
 
     # Add some check-ins
@@ -851,9 +849,9 @@ def test_get_user_votes_success(db_connection: Session):
     # Add some votes
     db_connection.add_all(
         [
-            ElectionVote(election_id=election1.id, vote_token="TOKEN1", vote="A"),
-            ElectionVote(election_id=election1.id, vote_token="TOKEN2", vote="B"),
-            ElectionVote(election_id=election2.id, vote_token="TOKEN1", vote="C"),
+            PollVote(poll_id=poll1.id, vote_token="TOKEN1", vote="A"),
+            PollVote(poll_id=poll1.id, vote_token="TOKEN2", vote="B"),
+            PollVote(poll_id=poll2.id, vote_token="TOKEN1", vote="C"),
         ]
     )
     db_connection.commit()
@@ -861,12 +859,12 @@ def test_get_user_votes_success(db_connection: Session):
     votes = get_user_votes(db_connection, meeting.id, "TOKEN1")
     assert isinstance(votes, dict)
     assert len(votes) == 2
-    assert election1.id in votes
-    assert votes[election1.id]["name"] == "Election 1"
-    assert votes[election1.id]["vote"] == "A"
-    assert election2.id in votes
-    assert votes[election2.id]["name"] == "Election 2"
-    assert votes[election2.id]["vote"] == "C"
+    assert poll1.id in votes
+    assert votes[poll1.id]["name"] == "Poll 1"
+    assert votes[poll1.id]["vote"] == "A"
+    assert poll2.id in votes
+    assert votes[poll2.id]["name"] == "Poll 2"
+    assert votes[poll2.id]["vote"] == "C"
 
 
 def test_get_user_votes_nonexistent_meeting(db_connection: Session):
@@ -886,10 +884,10 @@ def test_get_user_votes_nonexistent_vote_token(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Add some elections and votes to test cascading deletes
-    election1 = Election(meeting_id=meeting.id, name="Election 1")
-    election2 = Election(meeting_id=meeting.id, name="Election 2")
-    db_connection.add_all([election1, election2])
+    # Add some polls and votes to test cascading deletes
+    poll1 = Poll(meeting_id=meeting.id, name="Poll 1")
+    poll2 = Poll(meeting_id=meeting.id, name="Poll 2")
+    db_connection.add_all([poll1, poll2])
     db_connection.flush()
 
     # Add some check-ins
@@ -912,9 +910,9 @@ def test_get_user_votes_nonexistent_vote_token(db_connection: Session):
     # Add some votes
     db_connection.add_all(
         [
-            ElectionVote(election_id=election1.id, vote_token="TOKEN1", vote="A"),
-            ElectionVote(election_id=election1.id, vote_token="TOKEN2", vote="B"),
-            ElectionVote(election_id=election2.id, vote_token="TOKEN1", vote="C"),
+            PollVote(poll_id=poll1.id, vote_token="TOKEN1", vote="A"),
+            PollVote(poll_id=poll1.id, vote_token="TOKEN2", vote="B"),
+            PollVote(poll_id=poll2.id, vote_token="TOKEN1", vote="C"),
         ]
     )
     db_connection.commit()
@@ -933,20 +931,20 @@ def test_get_vote_counts(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    election = Election(meeting_id=meeting.id, name="Election 1")
-    db_connection.add(election)
+    poll = Poll(meeting_id=meeting.id, name="Poll 1")
+    db_connection.add(poll)
     db_connection.commit()
 
     # Add some votes
     db_connection.add_all(
         [
-            ElectionVote(election_id=election.id, vote_token="TOKEN1", vote="A"),
-            ElectionVote(election_id=election.id, vote_token="TOKEN2", vote="B"),
+            PollVote(poll_id=poll.id, vote_token="TOKEN1", vote="A"),
+            PollVote(poll_id=poll.id, vote_token="TOKEN2", vote="B"),
         ]
     )
     db_connection.commit()
 
-    vote_counts = get_vote_counts(db_connection, election.id)
+    vote_counts = get_vote_counts(db_connection, poll.id)
     assert vote_counts == {
         "A": 1,
         "B": 1,
@@ -959,8 +957,8 @@ def test_get_vote_counts(db_connection: Session):
     }
 
 
-def test_vote_in_election_success(db_connection: Session):
-    """Test successfully voting in an election."""
+def test_vote_in_poll_success(db_connection: Session):
+    """Test successfully voting in an poll."""
     # Create a meeting
     start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
     end_time = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -972,9 +970,9 @@ def test_vote_in_election_success(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Create an election
-    election = Election(meeting_id=meeting.id, name="Test Election")
-    db_connection.add(election)
+    # Create an poll
+    poll = Poll(meeting_id=meeting.id, name="Test Poll")
+    db_connection.add(poll)
     db_connection.commit()
 
     # Create a check-in
@@ -987,20 +985,20 @@ def test_vote_in_election_success(db_connection: Session):
     db_connection.add(checkin)
     db_connection.commit()
 
-    vote_in_election(
+    vote_in_poll(
         db=db_connection,
         meeting_id=meeting.id,
-        election_id=election.id,
+        poll_id=poll.id,
         vote_token=vote_token,
         vote="A",
     )
 
     # Verify the vote was recorded
     vote = (
-        db_connection.query(ElectionVote)
+        db_connection.query(PollVote)
         .filter(
-            ElectionVote.election_id == election.id,
-            ElectionVote.vote_token == vote_token,
+            PollVote.poll_id == poll.id,
+            PollVote.vote_token == vote_token,
         )
         .one_or_none()
     )
@@ -1008,8 +1006,8 @@ def test_vote_in_election_success(db_connection: Session):
     assert vote.vote == "A"
 
 
-def test_vote_in_election_invalid_election(db_connection: Session):
-    """Test voting with an invalid election ID."""
+def test_vote_in_poll_invalid_poll(db_connection: Session):
+    """Test voting with an invalid poll ID."""
     # Create a meeting
     start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
     end_time = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -1031,18 +1029,18 @@ def test_vote_in_election_invalid_election(db_connection: Session):
     db_connection.add(checkin)
     db_connection.commit()
 
-    with pytest.raises(ValueError, match="Invalid election"):
-        vote_in_election(
+    with pytest.raises(ValueError, match="Invalid poll"):
+        vote_in_poll(
             db=db_connection,
             meeting_id=meeting.id,
-            election_id=999,  # Non-existent election
+            poll_id=999,  # Non-existent poll
             vote_token=vote_token,
             vote="A",
         )
 
 
-def test_vote_in_election_already_voted(db_connection: Session):
-    """Test that a user cannot vote twice in the same election."""
+def test_vote_in_poll_already_voted(db_connection: Session):
+    """Test that a user cannot vote twice in the same poll."""
     # Create a meeting
     start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
     end_time = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -1054,9 +1052,9 @@ def test_vote_in_election_already_voted(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Create an election
-    election = Election(meeting_id=meeting.id, name="Test Election")
-    db_connection.add(election)
+    # Create an poll
+    poll = Poll(meeting_id=meeting.id, name="Test Poll")
+    db_connection.add(poll)
     db_connection.commit()
 
     # Create a check-in
@@ -1070,8 +1068,8 @@ def test_vote_in_election_already_voted(db_connection: Session):
     db_connection.commit()
 
     # Record a vote
-    vote = ElectionVote(
-        election_id=election.id,
+    vote = PollVote(
+        poll_id=poll.id,
         vote_token=vote_token,
         vote="A",
     )
@@ -1080,16 +1078,16 @@ def test_vote_in_election_already_voted(db_connection: Session):
 
     # Try to vote again with the same token
     with pytest.raises(ValueError, match="already voted"):
-        vote_in_election(
+        vote_in_poll(
             db=db_connection,
             meeting_id=meeting.id,
-            election_id=election.id,
+            poll_id=poll.id,
             vote_token=vote_token,
             vote="B",  # Different vote
         )
 
 
-def test_vote_in_election_invalid_token(db_connection: Session):
+def test_vote_in_poll_invalid_token(db_connection: Session):
     """Test voting with an invalid token."""
     # Create a meeting
     start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
@@ -1102,23 +1100,23 @@ def test_vote_in_election_invalid_token(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Create an election
-    election = Election(meeting_id=meeting.id, name="Test Election")
-    db_connection.add(election)
+    # Create an poll
+    poll = Poll(meeting_id=meeting.id, name="Test Poll")
+    db_connection.add(poll)
     db_connection.commit()
 
     # Try to vote with an invalid token
     with pytest.raises(ValueError, match="Invalid token"):
-        vote_in_election(
+        vote_in_poll(
             db=db_connection,
             meeting_id=meeting.id,
-            election_id=election.id,
+            poll_id=poll.id,
             vote_token="invalid_token",
             vote="A",
         )
 
 
-def test_vote_in_election_meeting_ended(db_connection: Session):
+def test_vote_in_poll_meeting_ended(db_connection: Session):
     """Test that voting is not allowed after the meeting has ended."""
     # Create a meeting that has already ended
     start_time = datetime.now(timezone.utc) - timedelta(hours=2)
@@ -1131,9 +1129,9 @@ def test_vote_in_election_meeting_ended(db_connection: Session):
     db_connection.add(meeting)
     db_connection.commit()
 
-    # Create an election
-    election = Election(meeting_id=meeting.id, name="Test Election")
-    db_connection.add(election)
+    # Create an poll
+    poll = Poll(meeting_id=meeting.id, name="Test Poll")
+    db_connection.add(poll)
     db_connection.commit()
 
     # Create a check-in (even though meeting has ended, the check-in exists)
@@ -1148,10 +1146,10 @@ def test_vote_in_election_meeting_ended(db_connection: Session):
 
     # Try to vote after meeting has ended
     with pytest.raises(ValueError, match="Voting has ended"):
-        vote_in_election(
+        vote_in_poll(
             db=db_connection,
             meeting_id=meeting.id,
-            election_id=election.id,
+            poll_id=poll.id,
             vote_token=vote_token,
             vote="A",
         )

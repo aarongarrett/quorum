@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Quorum : Vote in {{ election_name }}{% endblock %}
+{% block title %}Quorum : Vote in {{ poll_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -13,17 +13,17 @@
         padding: 1rem 0;
     }
     
-    .election-header {
+    .poll-header {
         text-align: center;
         margin-bottom: 1.25rem;
     }
     
-    .election-header h1 {
+    .poll-header h1 {
         font-size: 1.25rem;
         margin: 0 0 0.5rem 0;
     }
     
-    .election-subtitle {
+    .poll-subtitle {
         color: var(--text-muted);
         font-size: 1rem;
         margin: 0 0 1rem 0;
@@ -85,16 +85,16 @@
 {% block content %}
 
     <div class="card">
-        <h1 class="page-title">{{ election_name }}</h1>
+        <h1 class="page-title">{{ poll_name }}</h1>
         <p class="page-subtitle">Cast your vote</p>
-        <form method="POST" id="voteForm" data-election-id="{{ election_id }}">
+        <form method="POST" id="voteForm" data-poll-id="{{ poll_id }}">
             <div class="choices">
                 {% for option in ['A','E','B','F','C','G','D','H'] %}
                     <div class="choice-option">
                         <input 
                             type="radio" 
                             id="opt{{ option }}" 
-                            name="election_{{ election_id }}" 
+                            name="poll_{{ poll_id }}" 
                             value="{{ option }}" 
                             required
                         >

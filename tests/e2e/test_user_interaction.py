@@ -65,7 +65,7 @@ def test_checkin_with_invalid_code(user_meeting, browser, base_url):
     assert "invalid meeting code" in user_home.get_error_message().lower()
 
 
-def test_vote_in_election(user_meeting, browser, base_url):
+def test_vote_in_poll(user_meeting, browser, base_url):
     """Test the complete voting flow"""
     meeting_id = user_meeting["meeting_id"]
     user_home = UserHomePage(browser, base_url)
@@ -84,7 +84,7 @@ def test_vote_in_election(user_meeting, browser, base_url):
     )
     assert checkin_cookie is not None, "Checkin cookie should be set"
 
-    vote_url = user_home.get_vote_url(user_meeting["election_id"])
+    vote_url = user_home.get_vote_url(user_meeting["poll_id"])
     assert vote_url is not None, "Vote URL should be visible"
     browser.get(vote_url)
 

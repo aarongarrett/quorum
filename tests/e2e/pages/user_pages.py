@@ -11,7 +11,7 @@ class UserHomePage(BasePage):
     CHECK_IN_BUTTON = (By.CSS_SELECTOR, "button[type='submit']")
     ERROR_MESSAGE = (By.CSS_SELECTOR, ".alert.alert-danger")
     SUCCESS_MESSAGE = (By.CSS_SELECTOR, ".alert.alert-success")
-    ELECTION_OPTIONS = (By.CSS_SELECTOR, "input[name^='election_']")
+    POLL_OPTIONS = (By.CSS_SELECTOR, "input[name^='poll_']")
     VOTE_BUTTON = (By.CSS_SELECTOR, "button[type='submit']")
     VOTE_CONFIRMATION = (By.CSS_SELECTOR, ".vote-cast")
 
@@ -69,10 +69,10 @@ class UserHomePage(BasePage):
         checkin_button = meeting_card.find_element(By.CSS_SELECTOR, "a.btn.btn-primary")
         return checkin_button.get_attribute("href")
 
-    def get_vote_url(self, election_id):
-        """Get the vote URL for a specific election"""
-        election_div = self.browser.find_element(
-            By.CSS_SELECTOR, f"[data-election-id='{election_id}']"
+    def get_vote_url(self, poll_id):
+        """Get the vote URL for a specific poll"""
+        poll_div = self.browser.find_element(
+            By.CSS_SELECTOR, f"[data-poll-id='{poll_id}']"
         )
-        vote_button = election_div.find_element(By.CSS_SELECTOR, "a.btn.btn-primary")
+        vote_button = poll_div.find_element(By.CSS_SELECTOR, "a.btn.btn-primary")
         return vote_button.get_attribute("href")

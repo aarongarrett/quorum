@@ -11,11 +11,11 @@ from flask import current_app, jsonify, request, session
 from ...database import session_scope
 from ...services import (
     checkin,
-    create_election,
     create_meeting,
+    create_poll,
     get_all_meetings,
     get_available_meetings,
-    vote_in_election,
+    vote_in_poll,
 )
 
 api_bp = Blueprint("api", __name__, template_folder="templates")
@@ -55,8 +55,8 @@ def create_meeting_api() -> tuple[FlaskResponse, int]:
             return jsonify({"error": str(e)}), 500
 
 
-@api_bp.route("/admin/meetings/<int:meeting_id>/elections", methods=["POST"])
-def create_election_api(meeting_id: int) -> tuple[FlaskResponse, int]:
+@api_bp.route("/admin/meetings/<int:meeting_id>/polls", methods=["POST"])
+def create_poll_api(meeting_id: int) -> tuple[FlaskResponse, int]:
     """API endpoint to create a meeting"""
     if not session.get("is_admin"):
         return jsonify({"error": "Unauthorized"}), 403
@@ -68,8 +68,8 @@ def create_election_api(meeting_id: int) -> tuple[FlaskResponse, int]:
 
     with session_scope() as db:
         try:
-            e_id = create_election(db, meeting_id, name)
-            return jsonify({"election_id": e_id}), 201
+            e_id = create_poll(db, meeting_id, name)
+            return jsonify({"poll_id": e_id}), 201
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
@@ -130,10 +130,8 @@ def checkin_api(meeting_id: int) -> tuple[FlaskResponse, int]:
             return jsonify({"error": str(e)}), 500
 
 
-@api_bp.route(
-    "/meetings/<int:meeting_id>/elections/<int:election_id>/votes", methods=["POST"]
-)
-def vote_api(meeting_id: int, election_id: int) -> tuple[FlaskResponse, int]:
+@api_bp.route("/meetings/<int:meeting_id>/polls/<int:poll_id>/votes", methods=["POST"])
+def vote_api(meeting_id: int, poll_id: int) -> tuple[FlaskResponse, int]:
     """API endpoint to check in to a meeting"""
     payload = request.get_json()
     if "token" not in payload or len(payload["token"]) == 0:
@@ -145,7 +143,7 @@ def vote_api(meeting_id: int, election_id: int) -> tuple[FlaskResponse, int]:
 
     with session_scope() as db:
         try:
-            vote_in_election(db, meeting_id, election_id, token, vote)
+            vote_in_poll(db, meeting_id, poll_id, token, vote)
             return jsonify({"success": True}), 200
         except ValueError as e:
             return jsonify({"error": str(e)}), 404

@@ -46,11 +46,11 @@
         color: var(--danger-dark);
     }
 
-    .election-list {
+    .poll-list {
         margin-top: 1.5rem;
     }
     
-    .election-item {
+    .poll-item {
         border: 1px solid var(--border-color);
         border-radius: 0.5rem;
         padding: 1.25rem;
@@ -58,12 +58,12 @@
         transition: transform 0.2s, box-shadow 0.2s;
     }
     
-    .election-item:hover {
+    .poll-item:hover {
         transform: translateY(-1px);
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
     
-    .election-title {
+    .poll-title {
         font-size: 1.125rem;
         font-weight: 600;
         margin: 0 0 1rem 0;
@@ -125,7 +125,7 @@
     <script>
         // at the top of your page, expose the URL pattern:
         window.URL_TEMPLATES = {
-          vote: "{{ url_for('public.vote_ui', meeting_id=0, election_id=0) }}",
+          vote: "{{ url_for('public.vote_ui', meeting_id=0, poll_id=0) }}",
           checkin: "{{ url_for('public.checkin_ui', meeting_id=0) }}"
         };
     </script>
@@ -216,20 +216,20 @@
                     `;
                 } else {
                     // user _is_ checked in…
-                    const voteItems = (meeting.elections || []).map(election => {
+                    const voteItems = (meeting.polls || []).map(poll => {
                     // take the template "/meeting/0/vote/0", strip trailing "/0/0",
                     // then append the real IDs:
                     const voteUrl = window.URL_TEMPLATES.vote
-                        .replace(/\/meetings\/0\/elections\/0\//,
-                                 `/meetings/${meeting.id}/elections/${election.id}/`);
+                        .replace(/\/meetings\/0\/polls\/0\//,
+                                 `/meetings/${meeting.id}/polls/${poll.id}/`);
                     return `
-                        <div class="election-item" data-election-id="${election.id}">
-                        <h3 class="election-title">${escapeHtml(election.name)}</h3>
+                        <div class="poll-item" data-poll-id="${poll.id}">
+                        <h3 class="poll-title">${escapeHtml(poll.name)}</h3>
                         <div class="vote-status">
-                            ${election.vote
+                            ${poll.vote
                             ? `<div class="status-message vote-cast">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                    <span>You have voted: <strong>${escapeHtml(election.vote)}</strong></span>
+                                    <span>You have voted: <strong>${escapeHtml(poll.vote)}</strong></span>
                                </div>`
                             : `<a href="${voteUrl}" class="btn btn-primary">
                                     Vote Now
@@ -242,8 +242,8 @@
 
                     statusBadge = `
                     <div class="status-badge status-checked-in">✓ Checked In</div>
-                    <div class="election-list">
-                        ${voteItems || '<div class="no-elections"><p>No elections available.</p></div>'}
+                    <div class="poll-list">
+                        ${voteItems || '<div class="no-polls"><p>No polls available.</p></div>'}
                     </div>
                     `;
                 }

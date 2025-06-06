@@ -16,9 +16,9 @@ from ...database import session_scope
 from ...services import (
     checkin,
     get_available_meetings,
-    get_election,
     get_meeting,
-    vote_in_election,
+    get_poll,
+    vote_in_poll,
 )
 
 public_bp = Blueprint("public", __name__, template_folder="templates")
@@ -124,18 +124,18 @@ def auto_checkin(meeting_id):
 
 
 @public_bp.route(
-    "/meetings/<int:meeting_id>/elections/<int:election_id>/votes",
+    "/meetings/<int:meeting_id>/polls/<int:poll_id>/votes",
     methods=["GET", "POST"],
 )
 def vote_ui(
     meeting_id: int,
-    election_id: int,
+    poll_id: int,
 ) -> FlaskResponse:
-    """Handle voting for a specific election
+    """Handle voting for a specific poll
 
     Args:
         meeting_id: The ID of the meeting to vote in
-        election_id: The ID of the election to vote in
+        poll_id: The ID of the poll to vote in
 
     Returns:
         FlaskResponse: The response object
@@ -145,11 +145,11 @@ def vote_ui(
         flash("You have not checked in to any meetings", "error")
         return redirect(url_for("public.home_ui"))
 
-    # Get the election with its meeting ID
+    # Get the poll with its meeting ID
     with session_scope() as db:
-        election = get_election(db, election_id)
-    if not election or election["meeting_id"] != meeting_id:
-        flash("Invalid election", "error")
+        poll = get_poll(db, poll_id)
+    if not poll or poll["meeting_id"] != meeting_id:
+        flash("Invalid poll", "error")
         return redirect(url_for("public.home_ui"))
 
     # Verify user is checked into this meeting
@@ -164,20 +164,18 @@ def vote_ui(
         return redirect(url_for("public.home_ui"))
 
     if request.method == "POST":
-        if f"election_{election_id}" not in request.form:
+        if f"poll_{poll_id}" not in request.form:
             flash("Vote is required", "error")
-            return redirect(url_for("public.home_ui", election_id=election_id))
+            return redirect(url_for("public.home_ui", poll_id=poll_id))
 
-        vote = request.form[f"election_{election_id}"]
+        vote = request.form[f"poll_{poll_id}"]
         try:
             with session_scope() as db:
-                vote_in_election(db, meeting_id, election_id, vote_token, vote)
+                vote_in_poll(db, meeting_id, poll_id, vote_token, vote)
             flash("Vote recorded successfully", "success")
         except ValueError as e:
             flash(str(e), "error")
         return redirect(url_for("public.home_ui"))
 
     # For GET requests, show the voting form
-    return render_template(
-        "vote.html", election_id=election_id, election_name=election["name"]
-    )
+    return render_template("vote.html", poll_id=poll_id, poll_name=poll["name"])

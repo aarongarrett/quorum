@@ -51,28 +51,28 @@ Admin Dashboard
         margin-bottom: 0.5rem;
     }
     
-    .election-table {
+    .poll-table {
         width: 100%;
         border-collapse: collapse;
         margin-top: 1rem;
         font-size: 0.875rem;
     }
     
-    .election-table th,
-    .election-table td {
+    .poll-table th,
+    .poll-table td {
         padding: 0.75rem 1rem;
         text-align: left;
         border-bottom: 1px solid var(--border-color);
     }
     
-    .election-table th {
+    .poll-table th {
         background-color: var(--bg-color);
         text-transform: uppercase;
         font-size: 0.75rem;
         letter-spacing: 0.05em;
     }
     
-    .election-table tr:last-child td {
+    .poll-table tr:last-child td {
         border-bottom: none;
     }
     
@@ -86,7 +86,7 @@ Admin Dashboard
         color: var(--primary-color);
     }
     
-    .election-votes {
+    .poll-votes {
         display: flex;
         gap: 0.5rem;
         margin-top: 0.5rem;
@@ -202,13 +202,13 @@ Admin Dashboard
                 </div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('admin.election_create_ui', meeting_id=meeting.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('admin.poll_create_ui', meeting_id=meeting.id) }}" class="btn btn-primary">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                         <polyline points="17 21 17 13 7 13 7 21"></polyline>
                         <polyline points="7 3 7 8 15 8"></polyline>
                     </svg>
-                    Create Election
+                    Create Poll
                 </a>
                 <button class="btn btn-danger delete-meeting-btn" data-meeting-id="{{ meeting.id }}" data-meeting-date="{{ meeting.start_time|strftime('%B %d, %Y') }}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
@@ -235,11 +235,11 @@ Admin Dashboard
                 </div>
                 <div class="card-details">
                     
-                    {% if meeting.elections %}
-                        <table class="election-table">
+                    {% if meeting.polls %}
+                        <table class="poll-table">
                             <thead>
                                 <tr>
-                                    <th>Election</th>
+                                    <th>Poll</th>
                                     <th>Total Votes</th>
                                     <th>A</th>
                                     <th>B</th>
@@ -253,20 +253,20 @@ Admin Dashboard
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for election in meeting.elections %}
-                                <tr class="election-row">
-                                    <td>{{ election.name }}</td>
-                                    <td id="vote-count-{{ election.id }}" class="vote-count">{{ election.total_votes }}</td>
-                                    <td id="vote-{{ election.id }}-A" class="vote-count">{{ election.votes['A'] }}</td>
-                                    <td id="vote-{{ election.id }}-B" class="vote-count">{{ election.votes['B'] }}</td>
-                                    <td id="vote-{{ election.id }}-C" class="vote-count">{{ election.votes['C'] }}</td>
-                                    <td id="vote-{{ election.id }}-D" class="vote-count">{{ election.votes['D'] }}</td>
-                                    <td id="vote-{{ election.id }}-E" class="vote-count">{{ election.votes['E'] }}</td>
-                                    <td id="vote-{{ election.id }}-F" class="vote-count">{{ election.votes['F'] }}</td>
-                                    <td id="vote-{{ election.id }}-G" class="vote-count">{{ election.votes['G'] }}</td>
-                                    <td id="vote-{{ election.id }}-H" class="vote-count">{{ election.votes['H'] }}</td>
+                                {% for poll in meeting.polls %}
+                                <tr class="poll-row">
+                                    <td>{{ poll.name }}</td>
+                                    <td id="vote-count-{{ poll.id }}" class="vote-count">{{ poll.total_votes }}</td>
+                                    <td id="vote-{{ poll.id }}-A" class="vote-count">{{ poll.votes['A'] }}</td>
+                                    <td id="vote-{{ poll.id }}-B" class="vote-count">{{ poll.votes['B'] }}</td>
+                                    <td id="vote-{{ poll.id }}-C" class="vote-count">{{ poll.votes['C'] }}</td>
+                                    <td id="vote-{{ poll.id }}-D" class="vote-count">{{ poll.votes['D'] }}</td>
+                                    <td id="vote-{{ poll.id }}-E" class="vote-count">{{ poll.votes['E'] }}</td>
+                                    <td id="vote-{{ poll.id }}-F" class="vote-count">{{ poll.votes['F'] }}</td>
+                                    <td id="vote-{{ poll.id }}-G" class="vote-count">{{ poll.votes['G'] }}</td>
+                                    <td id="vote-{{ poll.id }}-H" class="vote-count">{{ poll.votes['H'] }}</td>
                                     <td class="action-buttons">
-                                        <button class="btn btn-sm btn-outline-danger delete-election-btn" data-meeting-id="{{ meeting.id }}" data-election-id="{{ election.id }}" data-election-name="{{ election.name }}">
+                                        <button class="btn btn-sm btn-outline-danger delete-poll-btn" data-meeting-id="{{ meeting.id }}" data-poll-id="{{ poll.id }}" data-poll-name="{{ poll.name }}">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
                                                 <polyline points="3 6 5 6 21 6"></polyline>
                                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -280,7 +280,7 @@ Admin Dashboard
                             </tbody>
                         </table>
                     {% else %}
-                        <p class="no-elections">No elections created yet for this meeting.</p>
+                        <p class="no-polls">No polls created yet for this meeting.</p>
                     {% endif %}
                 </div>
             </div>
@@ -311,7 +311,7 @@ Admin Dashboard
                 </div>
                 <div class="modal-body">
                     <p>Are you sure you want to delete the meeting on <strong id="meetingDate"></strong>?</p>
-                    <p class="text-danger"><strong>Warning:</strong> This will also delete all associated check-ins, elections, and votes. This action cannot be undone.</p>
+                    <p class="text-danger"><strong>Warning:</strong> This will also delete all associated check-ins, polls, and votes. This action cannot be undone.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -324,23 +324,23 @@ Admin Dashboard
         </div>
     </div>
 
-    <!-- Delete Election Confirmation Modal -->
-    <div class="modal fade" id="deleteElectionModal" tabindex="-1" aria-labelledby="deleteElectionModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <!-- Delete Poll Confirmation Modal -->
+    <div class="modal fade" id="deletePollModal" tabindex="-1" aria-labelledby="deletePollModalLabel" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="deleteElectionModalLabel">Confirm Deletion</h5>
+                    <h5 class="modal-title" id="deletePollModalLabel">Confirm Deletion</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Are you sure you want to delete the election: <strong id="electionName"></strong>?</p>
+                    <p>Are you sure you want to delete the poll: <strong id="pollName"></strong>?</p>
                     <p class="text-danger"><strong>Warning:</strong> This will also delete all associated votes. This action cannot be undone.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <form id="deleteElectionForm" method="POST" action="">
+                    <form id="deletePollForm" method="POST" action="">
                         <input type="hidden" name="_method" value="DELETE">
-                        <button type="submit" class="btn btn-danger">Delete Election</button>
+                        <button type="submit" class="btn btn-danger">Delete Poll</button>
                     </form>
                 </div>
             </div>
@@ -382,16 +382,16 @@ document.addEventListener('DOMContentLoaded', function() {
             .querySelectorAll(`[data-meeting-id="${meetingId}"] .checkin-count`)
             .forEach(el => { el.textContent = meeting.checkins; });
 
-            // 2) Update each election under this meeting
-            meeting.elections.forEach(election => {
-            const eid = election.id;
+            // 2) Update each poll under this meeting
+            meeting.polls.forEach(poll => {
+            const eid = poll.id;
 
             // 2a) total votes
             const totalEl = document.querySelector(`#vote-count-${eid}`);
-            if (totalEl) totalEl.textContent = election.total_votes;
+            if (totalEl) totalEl.textContent = poll.total_votes;
 
             // 2b) per‐option counts
-            Object.entries(election.votes || {}).forEach(([opt, cnt]) => {
+            Object.entries(poll.votes || {}).forEach(([opt, cnt]) => {
                 const optEl = document.querySelector(`#vote-${eid}-${opt}`);
                 if (optEl) optEl.textContent = cnt;
             });
@@ -408,10 +408,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteMeetingForm = document.getElementById('deleteMeetingForm');
     const meetingDateElement = document.getElementById('meetingDate');
     
-    // Initialize delete election modal
-    const deleteElectionModal = new bootstrap.Modal(document.getElementById('deleteElectionModal'));
-    const deleteElectionForm = document.getElementById('deleteElectionForm');
-    const electionNameElement = document.getElementById('electionName');
+    // Initialize delete poll modal
+    const deletePollModal = new bootstrap.Modal(document.getElementById('deletePollModal'));
+    const deletePollForm = document.getElementById('deletePollForm');
+    const pollNameElement = document.getElementById('pollName');
     
     // Set up delete meeting buttons
     document.querySelectorAll('.delete-meeting-btn').forEach(button => {
@@ -428,19 +428,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Set up delete election buttons
-    document.querySelectorAll('.delete-election-btn').forEach(button => {
+    // Set up delete poll buttons
+    document.querySelectorAll('.delete-poll-btn').forEach(button => {
         button.addEventListener('click', function() {
             const meetingId = this.getAttribute('data-meeting-id');
-            const electionId = this.getAttribute('data-election-id');
-            const electionName = this.getAttribute('data-election-name');
+            const pollId = this.getAttribute('data-poll-id');
+            const pollName = this.getAttribute('data-poll-name');
             
-            // Update the modal with the election details
-            electionNameElement.textContent = electionName;
-            deleteElectionForm.action = `/admin/meetings/${meetingId}/elections/${electionId}`;
+            // Update the modal with the poll details
+            pollNameElement.textContent = pollName;
+            deletePollForm.action = `/admin/meetings/${meetingId}/polls/${pollId}`;
             
             // Show the modal
-            deleteElectionModal.show();
+            deletePollModal.show();
         });
     });
     

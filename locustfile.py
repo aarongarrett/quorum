@@ -48,14 +48,14 @@ def on_test_start(environment, **kwargs):
         data = meeting_response.json()
         mid, _ = data["meeting_id"], data["meeting_code"]
         for j in range(2):
-            election_response = session.post(
-                f"{base_url}/api/admin/meetings/{mid}/elections",
+            poll_response = session.post(
+                f"{base_url}/api/admin/meetings/{mid}/polls",
                 json={
-                    "name": f"Election {i}{j}"
+                    "name": f"Poll {i}{j}"
                 }
             )
-            if election_response.status_code != 201:
-                raise RuntimeError(f"Failed to create election {j+1} in test setup: {election_response.status_code} {election_response.text}")
+            if poll_response.status_code != 201:
+                raise RuntimeError(f"Failed to create poll {j+1} in test setup: {poll_response.status_code} {poll_response.text}")
 
 
 
@@ -103,18 +103,18 @@ class VotingUser(HttpUser):
             except Exception:
                 checkin_response.failure(f"Failed to parse checkin JSON  {checkin_response.text}")
 
-            # Step 3: Vote in each election
-            for election in meeting["elections"]:
-                election_id = election["id"]
+            # Step 3: Vote in each poll
+            for poll in meeting["polls"]:
+                poll_id = poll["id"]
                 with self.client.post(
-                    f"/api/meetings/{meeting_id}/elections/{election_id}/votes",
+                    f"/api/meetings/{meeting_id}/polls/{poll_id}/votes",
                     json={
                         "token": vote_token,
                         "vote": random.choice("ABCDEFGH")
                     },
-                    name="POST /api/meetings/<meeting_id>/elections/<election_id>/votes",
+                    name="POST /api/meetings/<meeting_id>/polls/<poll_id>/votes",
                     catch_response=True
                 ) as vote_response:
                     if vote_response.status_code != 200:
-                        vote_response.failure(f"Vote failed for election {election_id}  {vote_response.text}")
+                        vote_response.failure(f"Vote failed for poll {poll_id}  {vote_response.text}")
                         return

@@ -60,8 +60,8 @@ class Meeting(Base):
     meeting_code: Mapped[str] = mapped_column(String, unique=True, nullable=False)
 
     # Relationships
-    elections: Mapped[list["Election"]] = relationship(
-        "Election", back_populates="meeting", cascade="all, delete-orphan"
+    polls: Mapped[list["Poll"]] = relationship(
+        "Poll", back_populates="meeting", cascade="all, delete-orphan"
     )
     checkins: Mapped[list["Checkin"]] = relationship(
         "Checkin", back_populates="meeting", cascade="all, delete-orphan"
@@ -79,8 +79,8 @@ class Meeting(Base):
         return checkin_start <= current_time <= self.end_time
 
 
-class Election(Base):
-    __tablename__ = "elections"
+class Poll(Base):
+    __tablename__ = "polls"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     meeting_id: Mapped[int] = mapped_column(
@@ -89,9 +89,9 @@ class Election(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
 
     # Relationships
-    meeting: Mapped["Meeting"] = relationship("Meeting", back_populates="elections")
-    votes: Mapped[list["ElectionVote"]] = relationship(
-        "ElectionVote", back_populates="election", cascade="all, delete-orphan"
+    meeting: Mapped["Meeting"] = relationship("Meeting", back_populates="polls")
+    votes: Mapped[list["PollVote"]] = relationship(
+        "PollVote", back_populates="poll", cascade="all, delete-orphan"
     )
 
 
@@ -111,20 +111,20 @@ class Checkin(Base):
     meeting: Mapped["Meeting"] = relationship("Meeting", back_populates="checkins")
 
 
-class ElectionVote(Base):
-    __tablename__ = "election_votes"
+class PollVote(Base):
+    __tablename__ = "poll_votes"
     __table_args__ = (
         Index(
-            "ix_election_votes_election_id_vote_token",
-            "election_id",
+            "ix_poll_votes_poll_id_vote_token",
+            "poll_id",
             "vote_token",
             unique=True,
         ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    election_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("elections.id", ondelete="CASCADE"), nullable=False
+    poll_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("polls.id", ondelete="CASCADE"), nullable=False
     )
     vote: Mapped[str] = mapped_column(String(1), nullable=False)
     vote_token: Mapped[str] = mapped_column(String, nullable=False)
@@ -133,13 +133,11 @@ class ElectionVote(Base):
     )
 
     # Relationships
-    election: Mapped["Election"] = relationship("Election", back_populates="votes")
+    poll: Mapped["Poll"] = relationship("Poll", back_populates="votes")
 
 
 # Create indexes for better performance
 
 Checkin.meeting_id_index = Index("idx_checkins_meeting", Checkin.meeting_id)
-ElectionVote.election_id_index = Index(
-    "idx_election_votes_election", ElectionVote.election_id
-)
-ElectionVote.token_index = Index("idx_election_votes_token", ElectionVote.vote_token)
+PollVote.poll_id_index = Index("idx_poll_votes_poll", PollVote.poll_id)
+PollVote.token_index = Index("idx_poll_votes_token", PollVote.vote_token)

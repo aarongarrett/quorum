@@ -1,7 +1,8 @@
 import pytest
 
 from app import create_app
-from app.database import Base, configure_database
+from app.database import configure_database
+from app.models import Base
 
 
 @pytest.fixture

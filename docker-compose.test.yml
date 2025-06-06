@@ -2,11 +2,7 @@ services:
   web:
     environment:
       FLASK_ENV: testing
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespwd
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: quorum_test
+      FLASK_APP: run.py
       DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum_test
     volumes:
       - .:/app
@@ -16,10 +12,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespwd
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
       POSTGRES_DB: quorum_test
-      DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum_test
 
   tox:
     build:
@@ -27,11 +20,6 @@ services:
       dockerfile: Dockerfile.tox
     environment:
       FLASK_ENV: testing
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespwd
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: quorum_test
       DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum_test
       BASE_URL: http://web:5000
       SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub

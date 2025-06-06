@@ -148,7 +148,7 @@ def test_auto_checkin_page_renders(client, db_connection, app):
     assert re.search(r"location\.hash\.slice\(1\)", html)
 
     # 5) It should include the hidden <input name="code" id="checkinCode">
-    assert '<input name="code" id="checkinCode"' in html
+    assert '<input name="meeting_code" id="meeting_code"' in html
 
 
 def test_vote_without_checkin_redirects_home(client, db_connection, app):

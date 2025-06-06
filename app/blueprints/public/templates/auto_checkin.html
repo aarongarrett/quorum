@@ -12,16 +12,16 @@
       method="POST"
       style="display:none"
     >
-      <input name="code" id="checkinCode" />
+      <input name="meeting_code" id="meeting_code" />
     </form>
     <script>
       // Pull the code out of the fragment
-      const token = decodeURIComponent(location.hash.slice(1));
-      if (!token) {
+      const meeting_code = decodeURIComponent(location.hash.slice(1));
+      if (!meeting_code) {
         document.body.innerHTML = "<p>Error: no code found.</p>";
       } else {
         // put it in the hidden field
-        document.getElementById("checkinCode").value = token;
+        document.getElementById("meeting_code").value = meeting_code;
         // auto-submit
         document.getElementById("checkinForm").submit();
       }

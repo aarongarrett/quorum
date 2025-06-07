@@ -18,7 +18,7 @@ from flask import (
 
 from app.services.meetings import get_all_meetings
 
-from ...database import session_scope
+from ...database import db
 from ...services import (
     create_meeting,
     create_poll,
@@ -64,10 +64,9 @@ def dashboard_ui():
     resp = _require_admin()
     if resp:
         return resp
-    with session_scope() as db:
-        meetings = get_all_meetings(db, current_app.config["TZ"])
-        base_url = request.url_root.rstrip("/") + "/admin"
-        return render_template("dashboard.html", meetings=meetings, base_url=base_url)
+    meetings = get_all_meetings(db.session, current_app.config["TZ"])
+    base_url = request.url_root.rstrip("/") + "/admin"
+    return render_template("dashboard.html", meetings=meetings, base_url=base_url)
 
 
 @admin_bp.route("/meetings", methods=["GET", "POST"])
@@ -101,8 +100,7 @@ def meeting_create_ui():
                 flash("Invalid date/time format", "error")
                 return redirect(request.url)
 
-            with session_scope() as db:
-                m_id, m_code = create_meeting(db, start_time, end_time)
+            m_id, m_code = create_meeting(db.session, start_time, end_time)
             flash(f"Meeting created (code: {m_code})", "success")
             return redirect(url_for("admin.dashboard_ui"))
         except Exception as e:
@@ -120,8 +118,7 @@ def meeting_delete_ui(meeting_id):
     resp = _require_admin()
     if resp:
         return resp
-    with session_scope() as db:
-        success = delete_meeting(db, meeting_id)
+    success = delete_meeting(db.session, meeting_id)
     flash("Meeting deleted" if success else "Meeting not found", "info")
     return redirect(url_for("admin.dashboard_ui"))
 
@@ -134,8 +131,7 @@ def poll_create_ui(meeting_id):
     if request.method == "POST":
         try:
             name = request.form["name"]
-            with session_scope() as db:
-                create_poll(db, meeting_id, name)
+            create_poll(db.session, meeting_id, name)
             flash(f'Poll created (name: "{name}")', "success")
             return redirect(url_for("admin.dashboard_ui"))
         except Exception as e:
@@ -155,8 +151,7 @@ def poll_delete_ui(meeting_id, poll_id):
     resp = _require_admin()
     if resp:
         return resp
-    with session_scope() as db:
-        success = delete_poll(db, meeting_id, poll_id)
+    success = delete_poll(db.session, meeting_id, poll_id)
     flash("Poll deleted" if success else "Poll not found", "info")
     return redirect(url_for("admin.dashboard_ui"))
 
@@ -180,27 +175,26 @@ def generate_qr(meeting_id: int, fmt: str = "svg") -> FlaskResponse:
         response.mimetype = "text/plain"
         return response
 
-    with session_scope() as db:
-        meeting = get_meeting(db, meeting_id)
-        if not meeting:
-            response = make_response("Invalid meeting", 404)
-            response.mimetype = "text/plain"
-            return response
-
-        # Generate the check-in URL
-        checkin_url = url_for(
-            "public.auto_checkin",
-            meeting_id=meeting_id,
-            _external=True,
-            _anchor=meeting["meeting_code"],
-        )
-
-        # Generate QR code using the logic function
-        buffer = generate_qr_code(checkin_url, fmt == "svg")
-
-        # Return the image as a response
-        response = make_response(buffer.getvalue())
-        response.mimetype = "image/svg+xml" if fmt == "svg" else "image/png"
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
+    meeting = get_meeting(db.session, meeting_id)
+    if not meeting:
+        response = make_response("Invalid meeting", 404)
+        response.mimetype = "text/plain"
         return response
+
+    # Generate the check-in URL
+    checkin_url = url_for(
+        "public.auto_checkin",
+        meeting_id=meeting_id,
+        _external=True,
+        _anchor=meeting["meeting_code"],
+    )
+
+    # Generate QR code using the logic function
+    buffer = generate_qr_code(checkin_url, fmt == "svg")
+
+    # Return the image as a response
+    response = make_response(buffer.getvalue())
+    response.mimetype = "image/svg+xml" if fmt == "svg" else "image/png"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response

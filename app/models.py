@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import TEXT, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import TEXT, DateTime, Index
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
+
+from .database import db
 
 
 class TZDateTime(TypeDecorator):
@@ -47,23 +48,19 @@ class TZDateTime(TypeDecorator):
         return value
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-class Meeting(Base):
+class Meeting(db.Model):
     __tablename__ = "meetings"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    start_time: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
-    end_time: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
-    meeting_code: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    start_time = db.Column(TZDateTime, nullable=False)
+    end_time = db.Column(TZDateTime, nullable=False)
+    meeting_code = db.Column(db.String, unique=True, nullable=False)
 
     # Relationships
-    polls: Mapped[list["Poll"]] = relationship(
+    polls = db.relationship(
         "Poll", back_populates="meeting", cascade="all, delete-orphan"
     )
-    checkins: Mapped[list["Checkin"]] = relationship(
+    checkins = db.relationship(
         "Checkin", back_populates="meeting", cascade="all, delete-orphan"
     )
 
@@ -79,39 +76,40 @@ class Meeting(Base):
         return checkin_start <= current_time <= self.end_time
 
 
-class Poll(Base):
+class Poll(db.Model):
     __tablename__ = "polls"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    meeting_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    meeting_id = db.Column(
+        db.Integer, db.ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False
     )
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    name = db.Column(db.String, nullable=False)
 
     # Relationships
-    meeting: Mapped["Meeting"] = relationship("Meeting", back_populates="polls")
-    votes: Mapped[list["PollVote"]] = relationship(
+    meeting = db.relationship("Meeting", back_populates="polls")
+    votes = db.relationship(
         "PollVote", back_populates="poll", cascade="all, delete-orphan"
     )
 
 
-class Checkin(Base):
+class Checkin(db.Model):
     __tablename__ = "checkins"
+    __table_args__ = (Index("idx_checkins_meeting", "meeting_id"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    meeting_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    meeting_id = db.Column(
+        db.Integer, db.ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False
     )
-    timestamp: Mapped[datetime] = mapped_column(
+    timestamp = db.Column(
         TZDateTime, nullable=False, default=datetime.now(timezone.utc)
     )
-    vote_token: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    vote_token = db.Column(db.String, unique=True, nullable=False)
 
     # Relationships
-    meeting: Mapped["Meeting"] = relationship("Meeting", back_populates="checkins")
+    meeting = db.relationship("Meeting", back_populates="checkins")
 
 
-class PollVote(Base):
+class PollVote(db.Model):
     __tablename__ = "poll_votes"
     __table_args__ = (
         Index(
@@ -120,24 +118,19 @@ class PollVote(Base):
             "vote_token",
             unique=True,
         ),
+        Index("idx_poll_votes_poll", "poll_id"),
+        Index("idx_poll_votes_token", "vote_token"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    poll_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("polls.id", ondelete="CASCADE"), nullable=False
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    poll_id = db.Column(
+        db.Integer, db.ForeignKey("polls.id", ondelete="CASCADE"), nullable=False
     )
-    vote: Mapped[str] = mapped_column(String(1), nullable=False)
-    vote_token: Mapped[str] = mapped_column(String, nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(
+    vote = db.Column(db.String(1), nullable=False)
+    vote_token = db.Column(db.String, nullable=False)
+    timestamp = db.Column(
         TZDateTime, nullable=False, default=datetime.now(timezone.utc)
     )
 
     # Relationships
-    poll: Mapped["Poll"] = relationship("Poll", back_populates="votes")
-
-
-# Create indexes for better performance
-
-Checkin.meeting_id_index = Index("idx_checkins_meeting", Checkin.meeting_id)
-PollVote.poll_id_index = Index("idx_poll_votes_poll", PollVote.poll_id)
-PollVote.token_index = Index("idx_poll_votes_token", PollVote.vote_token)
+    poll = db.relationship("Poll", back_populates="votes")

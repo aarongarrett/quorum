@@ -311,6 +311,8 @@ def test_meeting_creation_success(authenticated_client, app):
         follow_redirects=True,
     )
 
+    print(response.data)
+
     assert response.status_code == 200
     assert b"Meeting created" in response.data
 

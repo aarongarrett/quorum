@@ -1,53 +1,32 @@
-import os
-from contextlib import contextmanager
-from typing import Iterator, Optional
+"""
+Database module using Flask-SQLAlchemy.
 
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import Session, scoped_session, sessionmaker
-from sqlalchemy.orm.session import Session as SessionType
+Usage:
+    from .database import db, init_db
+    # In your app factory:
+    init_db(app)
+    # Use db.Model for models
+"""
+from flask_sqlalchemy import SQLAlchemy
 
-# Globals for engine and session factory
-engine: Optional[Engine] = None
-SessionLocal: Optional[scoped_session[SessionType]] = None
-
-
-# Function to configure the database (for test or prod)
-def configure_database(uri: Optional[str] = None) -> None:
-    global engine, SessionLocal
-    if uri is None:
-        uri = os.environ.get("DATABASE_URL", "sqlite:///quorum.db")
-
-    connect_args = {}
-    if uri.startswith("sqlite"):
-        connect_args = {"check_same_thread": False}
-
-    engine = create_engine(
-        uri,
-        connect_args=connect_args,
-        echo=False,  # Set to True for SQL query logging
-    )
-    SessionLocal = scoped_session(
-        sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    )
+db = SQLAlchemy()
 
 
-def get_db_session() -> Iterator[Session]:
-    """Yield a new SQLAlchemy Session, then close."""
-    if SessionLocal is None:
-        raise RuntimeError("Database not initialized. Call configure_database() first.")
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def init_db(app):
+    """Initialize the Flask-SQLAlchemy extension with the Flask app."""
+    db_uri = app.config.get("DATABASE_URL")
+    if db_uri and db_uri.startswith("postgres://"):
+        # Handle Heroku's postgres:// URL format
+        app.config["SQLALCHEMY_DATABASE_URI"] = db_uri.replace(
+            "postgres://", "postgresql://", 1
+        )
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = db_uri or "sqlite:///quorum.db"
 
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "connect_args": {"check_same_thread": False}
+        }
 
-@contextmanager
-def session_scope():
-    for db in get_db_session():
-        try:
-            yield db
-        finally:
-            # the generator’s finally already calls db.close(),
-            # so we don’t need to do it again here
-            pass
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    db.init_app(app)

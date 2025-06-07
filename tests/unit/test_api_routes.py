@@ -389,6 +389,8 @@ def test_api_create_meeting_success(client, app):
         "/api/admin/meetings", json={"start_time": start_time, "end_time": end_time}
     )
 
+    print(response.json)
+
     assert response.status_code == 201
     assert "meeting_id" in response.json
     assert "meeting_code" in response.json

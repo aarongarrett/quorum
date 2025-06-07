@@ -1,12 +1,12 @@
 from flask import Flask
-from flask_migrate import Migrate
+from flask_migrate import Migrate, upgrade
+from sqlalchemy import inspect
 
 from .blueprints.admin.routes import admin_bp
 from .blueprints.api.routes import api_bp
 from .blueprints.public.routes import public_bp
 from .config import config as app_config
-from .database import configure_database
-from .models import Base
+from .database import db, init_db
 from .utils import strftime
 
 
@@ -16,12 +16,20 @@ def create_app(config_name: str = "default") -> Flask:
     # Load our configuration
     app.config.from_object(app_config[config_name])
 
-    # Wire up the database (sets up engine & SessionLocal)
-    configure_database(app.config["DATABASE_URL"])
+    # Initialize Flask-SQLAlchemy
+    init_db(app)
 
-    from .database import engine
+    # Set up Flask-Migrate with Flask-SQLAlchemy db
+    Migrate(app, db, directory="migrations")
 
-    Migrate(app, engine, metadata=Base.metadata, directory="migrations")
+    # Optional one-time schema bootstrap if DB is empty
+    if not app.config.get("TESTING", False):
+        with app.app_context():
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            if not tables:
+                app.logger.info("No tables found — running flask db upgrade()")
+                upgrade()
 
     app.add_template_filter(strftime, name="strftime")
 

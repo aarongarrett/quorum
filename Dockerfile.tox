@@ -20,4 +20,5 @@ COPY . /app
 
 ENV PYTHONUNBUFFERED=1
 
-ENTRYPOINT ["sh", "-c", "tox && tail -f /dev/null"]
+ENTRYPOINT ["bash"]
+# ENTRYPOINT ["sh", "-c", "tox && tail -f /dev/null"]

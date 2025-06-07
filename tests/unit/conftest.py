@@ -1,8 +1,7 @@
 import pytest
 
 from app import create_app
-from app.database import configure_database
-from app.models import Base
+from app.database import db
 
 
 @pytest.fixture
@@ -25,29 +24,9 @@ def authenticated_client(client):
 
 @pytest.fixture
 def db_connection(app):
-    # Have to import the globals here so that they'll be given
-    # real values by the configure_database step
-    from app.database import SessionLocal, engine
-
-    # Ensure the database is configured with the test settings
-    # Reconfigure the database to ensure we're using the test config
-    configure_database(app.config["DATABASE_URL"])
-
-    # Drop and re-create all tables so that the schema is fresh.
-    # (If you're already running Alembic migrations, replace this
-    #  with an alembic upgrade head or similar.)
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-
-    # Create a new connection and transaction
-    connection = engine.connect()
-    transaction = connection.begin()
-
-    session = SessionLocal()
-
-    yield session
-
-    # Cleanup: rollback the transaction and close both session & connection
-    SessionLocal.remove()  # expires & closes the SessionLocal
-    transaction.rollback()  # undoes all writes
-    connection.close()  # returns this connection to the pool
+    """Provide a clean database session for a test."""
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+        yield db.session
+        db.session.rollback()

@@ -10,6 +10,7 @@ RUN pip install --upgrade pip && \
 COPY app/ ./app/
 COPY config.py ./config.py
 COPY run.py ./run.py
+COPY migrations ./migrations
 
 ENV FLASK_ENV=production
 ENV GUNICORN_CMD_ARGS="--bind 0.0.0.0:5000 --workers=4 --worker-class=gevent"

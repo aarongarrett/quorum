@@ -12,7 +12,7 @@ from flask import (
     url_for,
 )
 
-from ...database import session_scope
+from ...database import db
 from ...services import (
     checkin,
     get_available_meetings,
@@ -37,9 +37,7 @@ def home_ui() -> FlaskResponse:
     # In case a cookie was cleared, take tokens from the session
     vote_tokens.update(meeting_tokens)
     tz = current_app.config["TZ"]
-    meetings = []
-    with session_scope() as db:
-        meetings = get_available_meetings(db, vote_tokens, tz)
+    meetings = get_available_meetings(db.session, vote_tokens, tz)
     return render_template("home.html", meetings=meetings)
 
 
@@ -72,8 +70,7 @@ def checkin_ui(
 
         # Process the check-in using the logic layer
         try:
-            with session_scope() as db:
-                vote_token = checkin(db, meeting_id, meeting_code)
+            vote_token = checkin(db.session, meeting_id, meeting_code)
 
             # Update session state
             if "checked_in_meetings" not in session:
@@ -106,8 +103,7 @@ def checkin_ui(
     # For GET requests, show the check-in form
     # Get meeting details
     tz = current_app.config["TZ"]
-    with session_scope() as db:
-        meeting = get_meeting(db, meeting_id, tz)
+    meeting = get_meeting(db.session, meeting_id, tz)
     if not meeting:
         flash(f"Invalid meeting ID ({meeting_id})", "error")
         return redirect(url_for("public.home_ui"))
@@ -146,8 +142,7 @@ def vote_ui(
         return redirect(url_for("public.home_ui"))
 
     # Get the poll with its meeting ID
-    with session_scope() as db:
-        poll = get_poll(db, poll_id)
+    poll = get_poll(db.session, poll_id)
     if not poll or poll["meeting_id"] != meeting_id:
         flash("Invalid poll", "error")
         return redirect(url_for("public.home_ui"))
@@ -170,8 +165,7 @@ def vote_ui(
 
         vote = request.form[f"poll_{poll_id}"]
         try:
-            with session_scope() as db:
-                vote_in_poll(db, meeting_id, poll_id, vote_token, vote)
+            vote_in_poll(db.session, meeting_id, poll_id, vote_token, vote)
             flash("Vote recorded successfully", "success")
         except ValueError as e:
             flash(str(e), "error")

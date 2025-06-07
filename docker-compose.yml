@@ -6,9 +6,12 @@ services:
     restart: unless-stopped
     environment:
       FLASK_ENV: production
+      FLASK_APP: "app:create_app"
       DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FLASK_SECRET: ${FLASK_SECRET}
+    volumes:
+      - .:/app
     ports:
       - "5000:5000"
     depends_on:

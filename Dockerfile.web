@@ -13,6 +13,7 @@ COPY run.py ./run.py
 COPY migrations ./migrations
 
 ENV FLASK_ENV=production
+ENV FLASK_APP="app:create_app"
 ENV GUNICORN_CMD_ARGS="--bind 0.0.0.0:5000 --workers=4 --worker-class=gevent"
 
 CMD ["gunicorn", "run:create_app('production')"]

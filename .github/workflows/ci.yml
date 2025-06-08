@@ -22,14 +22,14 @@ jobs:
 
       - name: Build tox & Postgres test containers
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             build tox db_test
 
       - name: Start Postgres for unit tests
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             up -d db_test
@@ -37,7 +37,7 @@ jobs:
       - name: Wait for Postgres to be healthy
         run: |
           for i in $(seq 1 12); do
-            if docker-compose \
+            if docker compose \
                  -f docker-compose.yml \
                  -f docker-compose.test.yml \
                  exec -T db_test pg_isready -U postgres; then
@@ -51,14 +51,14 @@ jobs:
 
       - name: Lint (tox -e lint)
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             run --rm tox tox -e lint
 
       - name: Unit tests (tox -e unit)
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             run --rm tox tox -e unit
@@ -66,7 +66,7 @@ jobs:
       - name: Clean up
         if: always()
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             down --remove-orphans
@@ -92,11 +92,11 @@ jobs:
 
       - name: Build & start test stack
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             build web db_test selenium tox
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             up -d web db_test selenium tox
@@ -118,7 +118,7 @@ jobs:
 
       - name: Tear down E2E stack
         run: |
-          docker-compose \
+          docker compose \
             -f docker-compose.yml \
             -f docker-compose.test.yml \
             down --remove-orphans

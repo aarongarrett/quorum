@@ -13,42 +13,68 @@ on:
 
 jobs:
   lint-and-unit:
-    name: 🧹 Lint & Unit Tests
+    name: 🧹 Lint & Unit via Docker Compose
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Cache pip deps
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/base.txt','requirements/dev.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Setup Python 3.10
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.10.0
-
-      - name: Install dependencies
+      - name: Build tox & Postgres test containers
         run: |
-          pip install --upgrade pip
-          pip install -r requirements/base.txt -r requirements/dev.txt
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            build tox db_test
 
-      - name: Lint & type-check (isort, black, flake8, mypy)
-        run: tox -e lint
+      - name: Start Postgres for unit tests
+        run: |
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            up -d db_test
 
-      - name: Run unit tests
-        run: tox -e unit
+      - name: Wait for Postgres to be healthy
+        run: |
+          for i in $(seq 1 12); do
+            if docker-compose \
+                 -f docker-compose.yml \
+                 -f docker-compose.test.yml \
+                 exec -T db_test pg_isready -U postgres; then
+              echo "Postgres is ready"; exit 0
+            fi
+            echo "Waiting for Postgres… ($i/12)"
+            sleep 5
+          done
+          echo "Postgres never came up!" >&2
+          exit 1
+
+      - name: Lint (tox -e lint)
+        run: |
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            run --rm tox tox -e lint
+
+      - name: Unit tests (tox -e unit)
+        run: |
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            run --rm tox tox -e unit
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            down --remove-orphans
 
   e2e-tests:
     name: 🚥 End-to-End Tests
     runs-on: ubuntu-latest
     needs: lint-and-unit
-
     services:
       selenium:
         image: selenium/standalone-chrome:117.0
@@ -61,13 +87,19 @@ jobs:
           --health-retries=3
 
     steps:
-      - name: Checkout code
+      - name: Check out code
         uses: actions/checkout@v3
 
       - name: Build & start test stack
         run: |
-          docker-compose -f docker-compose.yml -f docker-compose.test.yml build web db db_test selenium
-          docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d web db db_test selenium
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            build web db_test selenium tox
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            up -d web db_test selenium tox
 
       - name: Wait for Flask to be healthy
         run: |
@@ -82,19 +114,23 @@ jobs:
           exit 1
 
       - name: Run E2E suite
-        run: pytest tests/e2e
+        run: tox -e e2e
 
-      - name: Teardown
-        run: docker-compose -f docker-compose.yml -f docker-compose.test.yml down
+      - name: Tear down E2E stack
+        run: |
+          docker-compose \
+            -f docker-compose.yml \
+            -f docker-compose.test.yml \
+            down --remove-orphans
 
   publish:
     name: 🚀 Build & Push Docker Image
-    runs-on: ubuntu-latest
     needs: e2e-tests
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout code
+      - name: Check out code
         uses: actions/checkout@v3
 
       - name: Log in to registry
@@ -106,5 +142,6 @@ jobs:
 
       - name: Build & push web image
         run: |
-          docker build -f Dockerfile.web -t ${{ secrets.REGISTRY_URL }}/quorum:latest .
+          docker build -f Dockerfile.web \
+            -t ${{ secrets.REGISTRY_URL }}/quorum:latest .
           docker push ${{ secrets.REGISTRY_URL }}/quorum:latest

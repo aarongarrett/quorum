@@ -1,6 +1,8 @@
+import os
+from typing import Optional
+
 from flask import Flask
-from flask_migrate import Migrate, upgrade
-from sqlalchemy import inspect
+from flask_migrate import Migrate
 
 from .blueprints.admin.routes import admin_bp
 from .blueprints.api.routes import api_bp
@@ -10,7 +12,10 @@ from .database import db, init_db
 from .utils import strftime
 
 
-def create_app(config_name: str = "default") -> Flask:
+def create_app(config_name: Optional[str] = None) -> Flask:
+    if config_name is None:
+        config_name = os.getenv("FLASK_CONFIG", os.getenv("FLASK_ENV", "default"))
+
     app = Flask(__name__, instance_relative_config=False)
 
     # Load our configuration
@@ -21,15 +26,6 @@ def create_app(config_name: str = "default") -> Flask:
 
     # Set up Flask-Migrate with Flask-SQLAlchemy db
     Migrate(app, db, directory="migrations")
-
-    # Optional one-time schema bootstrap if DB is empty
-    if not app.config.get("TESTING", False):
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            if not tables:
-                app.logger.info("No tables found — running flask db upgrade()")
-                upgrade()
 
     app.add_template_filter(strftime, name="strftime")
 

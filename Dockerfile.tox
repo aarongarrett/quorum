@@ -18,7 +18,10 @@ RUN pip install --upgrade pip && \
 
 COPY . /app
 
+ENV FLASK_ENV=testing
+ENV FLASK_APP="app:create_app"
+
 ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["bash"]
-# ENTRYPOINT ["sh", "-c", "tox && tail -f /dev/null"]
+

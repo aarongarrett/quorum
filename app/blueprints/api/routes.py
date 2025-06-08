@@ -7,9 +7,7 @@ from datetime import datetime
 from flask import Blueprint
 from flask import Response as FlaskResponse
 from flask import current_app, jsonify, request, session
-
 from sqlalchemy.orm import sessionmaker
-
 
 from ...database import db
 from ...services import (
@@ -154,23 +152,29 @@ def admin_stream_api():
         return jsonify({"error": "Unauthorized"}), 403
 
     tz = current_app.config["TZ"]
-
-    engine = db.get_engine()
+    engine = db.engine
 
     def event_stream():
+        last_sent = time.time()
         SessionLocal = sessionmaker(bind=engine)
         session = SessionLocal()
         try:
-            try:
-                while True:
+            while True:
+                try:
                     meetings = get_all_meetings(session, tz)
-
                     data = json.dumps(meetings, default=str)
                     yield f"data: {data}\n\n"
-                    time.sleep(5)
-            except Exception as e:
-                yield f"event: error\ndata: An error occurred {e}\n\n"
-                time.sleep(5)
+                    last_sent = time.time()
+                except GeneratorExit:
+                    break
+                except Exception as e:
+                    yield f"event: error\ndata: An error occurred {e}\n\n"
+                    last_sent = time.time()
+                # If it's been too long since the last update, ping
+                if time.time() - last_sent > 15:
+                    yield ": ping\n\n"
+                    last_sent = time.time()
+                time.sleep(3)
         finally:
             session.close()
 
@@ -204,26 +208,30 @@ def user_stream_api():
     vote_tokens.update(meeting_tokens)
 
     tz = current_app.config["TZ"]
-
-    engine = db.get_engine()
+    engine = db.engine
 
     def event_stream():
+        last_sent = time.time()
         SessionLocal = sessionmaker(bind=engine)
         session = SessionLocal()
         try:
             while True:
                 try:
                     meetings = get_available_meetings(session, vote_tokens, tz)
-
-                    # Format as SSE data
                     data = json.dumps(meetings, default=str)
                     yield f"data: {data}\n\n"
-
-                    # Wait before next update
-                    time.sleep(10)
+                    last_sent = time.time()
+                except GeneratorExit:
+                    break
                 except Exception as e:
                     yield f"event: error\ndata: An error occurred {e}\n\n"
-                    time.sleep(5)  # Wait before retrying
+                    last_sent = time.time()
+
+                # If it's been too long since the last update, ping
+                if time.time() - last_sent > 15:
+                    yield ": ping\n\n"
+                    last_sent = time.time()
+                time.sleep(5)
         finally:
             session.close()
 

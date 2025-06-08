@@ -354,7 +354,8 @@ Admin Dashboard
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const eventSource = new EventSource('/api/admin/meetings/stream');
+    window.adminSSE = new EventSource('/api/admin/meetings/stream');
+    const eventSource = window.adminSSE;
     
     eventSource.onmessage = function(event) {
         try {

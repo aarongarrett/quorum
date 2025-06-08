@@ -9,7 +9,7 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.getenv("FLASK_SECRET", "your-secret-key-here")
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///quorum.db")
+    DATABASE_URL = os.getenv("DATABASE_URL")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "adminpass")
     TIMEZONE = os.getenv("APP_TIMEZONE", "America/New_York")
     TZ = ZoneInfo(TIMEZONE)
@@ -23,7 +23,7 @@ class DevelopmentConfig(Config):
 
 class TestingConfig(Config):
     TESTING = True
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///:memory:")
+    DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 class ProductionConfig(Config):

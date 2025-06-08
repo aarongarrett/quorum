@@ -15,11 +15,19 @@ def reset_database_via_http(base_url):
     Before running any E2E tests, hit POST /_test/reset-db on the web container.
     Since base_url points to the web container, this call empties the DB.
     """
+    # — SETUP: drop & recreate before any tests —
     url = f"{base_url}/_test/reset-db"
     resp = requests.post(url)
     if resp.status_code != 200:
         raise RuntimeError(f"Failed to reset DB: {resp.status_code} {resp.text}")
+
     yield
+
+    # — TEARDOWN: drop & recreate one final time —
+    resp = requests.post(f"{base_url}/_test/reset-db")
+    if resp.status_code != 200:
+        # you can log or raise here depending on how critical this is
+        raise RuntimeError(f"Failed to tear down DB: {resp.status_code} {resp.text}")
 
 
 @pytest.fixture(scope="session")
@@ -176,3 +184,21 @@ def clear_cookies(browser):
     browser.delete_all_cookies()
     yield
     browser.delete_all_cookies()
+
+
+@pytest.fixture(autouse=True)
+def close_sse(browser):
+    yield
+    # after each test, if the page ever created a SSE, close it
+    browser.execute_script(
+        """
+      if (window.userSSE) {
+        window.userSSE.close();
+        window.userSSE = null;
+      }
+      if (window.adminSSE) {
+        window.adminSSE.close();
+        window.adminSSE = null;
+      }
+    """
+    )

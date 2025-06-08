@@ -9,11 +9,13 @@ RUN pip install --upgrade pip && \
 
 COPY app/ ./app/
 COPY config.py ./config.py
-COPY run.py ./run.py
+COPY gunicorn.conf.py ./gunicorn.conf.py
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 COPY migrations ./migrations
 
 ENV FLASK_ENV=production
 ENV FLASK_APP="app:create_app"
-ENV GUNICORN_CMD_ARGS="--bind 0.0.0.0:5000 --workers=4 --worker-class=gevent"
+ENV GUNICORN_CMD_ARGS="--config gunicorn.conf.py"
 
-CMD ["gunicorn", "run:create_app('production')"]
+CMD ["./entrypoint.sh"]

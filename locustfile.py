@@ -12,8 +12,8 @@ def on_test_start(environment, **kwargs):
     load_dotenv()
 
     tz = ZoneInfo(os.getenv("APP_TIMEZONE", "America/New_York"))
-    admin_pwd = os.getenv("ADMIN_PASSWORD", "adminpass")
-    base_url = "http://web:5000"
+    admin_pwd = os.getenv("ADMIN_PASSWORD")
+    base_url = os.getenv("LOCUST_HOST")
 
     print("Clearing the current database...")
     response = requests.post(f"{base_url}/_test/reset-db")

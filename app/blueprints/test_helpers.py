@@ -9,6 +9,7 @@ test_bp = Blueprint("test_helpers", __name__, url_prefix="/_test")
 def reset_db():
     """DROP all tables and CREATE them again—only available under TESTING."""
     with current_app.app_context():
+        db.session.remove()
         db.drop_all()
         db.create_all()
     return jsonify({"status": "ok"}), 200

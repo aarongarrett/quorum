@@ -389,8 +389,6 @@ def test_api_create_meeting_success(client, app):
         "/api/admin/meetings", json={"start_time": start_time, "end_time": end_time}
     )
 
-    print(response.json)
-
     assert response.status_code == 201
     assert "meeting_id" in response.json
     assert "meeting_code" in response.json
@@ -507,20 +505,27 @@ def test_user_stream_sse(client, db_connection, monkeypatch):
     client.set_cookie(f"meeting_{m1_id}", chk_token)
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
+    from app.blueprints.api import routes
 
-    # 3) Hit the stream
-    resp = client.get("/api/meetings/stream")
-    assert resp.status_code == 200
+    monkeypatch.setattr(
+        routes,
+        "sessionmaker",
+        lambda bind=None, **kw: (lambda *args, **kwargs: db_connection),
+    )
 
-    # 4) Pull first chunk
-    first = next(resp.response)
-    data = json.loads(first.split(b"data: ", 1)[1])
-    # should only include meeting 1
-    assert isinstance(data, list)
-    ids = [m["id"] for m in data]
-    assert m1_id in ids and m2_id not in ids
-    assert data[0]["checked_in"]
-    assert len(data[0]["polls"]) == 0
+    with client.get("/api/meetings/stream") as resp:
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.content_type
+
+        chunk = next(resp.response)
+        data = json.loads(chunk.split(b"data: ", 1)[1])
+
+        # should only include meeting 1
+        assert isinstance(data, list)
+        ids = [m["id"] for m in data]
+        assert m1_id in ids and m2_id not in ids
+        assert data[0]["checked_in"]
+        assert len(data[0]["polls"]) == 0
 
 
 def test_admin_stream_sse(client, db_connection, monkeypatch, app):
@@ -542,14 +547,21 @@ def test_admin_stream_sse(client, db_connection, monkeypatch, app):
     db_connection.commit()
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
+    from app.blueprints.api import routes
 
-    resp = client.get("/api/admin/meetings/stream")
-    assert resp.status_code == 200
-    chunk = next(resp.response)
-    data = json.loads(chunk.split(b"data: ", 1)[1])
-    # data should be a list of meeting summaries
-    summary = next(m for m in data if m["id"] == m_id)
-    assert summary["checkins"] == 0  # no checkins in this example
-    assert summary["polls"][0]["total_votes"] == 3
-    assert summary["polls"][0]["votes"]["A"] == 2
-    assert summary["polls"][0]["votes"]["B"] == 1
+    monkeypatch.setattr(
+        routes,
+        "sessionmaker",
+        lambda bind=None, **kw: (lambda *args, **kwargs: db_connection),
+    )
+
+    with client.get("/api/admin/meetings/stream") as resp:
+        assert resp.status_code == 200
+        chunk = next(resp.response)
+        data = json.loads(chunk.split(b"data: ", 1)[1])
+        # data should be a list of meeting summaries
+        summary = next(m for m in data if m["id"] == m_id)
+        assert summary["checkins"] == 0  # no checkins in this example
+        assert summary["polls"][0]["total_votes"] == 3
+        assert summary["polls"][0]["votes"]["A"] == 2
+        assert summary["polls"][0]["votes"]["B"] == 1

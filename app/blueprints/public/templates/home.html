@@ -131,6 +131,9 @@
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            if (window.userStreamStarted) return; // already initialized
+            window.userStreamStarted = true;
+
             const container = document.getElementById('meetings-container');
             const noMeetings = document.querySelector('.no-meetings');
             
@@ -139,7 +142,8 @@
             updateMeetingsList(initialMeetings);
             
             // Set up SSE connection
-            const eventSource = new EventSource("/api/meetings/stream");
+            window.userSSE = new EventSource("/api/meetings/stream");
+            const eventSource = window.userSSE;
             
             eventSource.onmessage = function(event) {
                 try {

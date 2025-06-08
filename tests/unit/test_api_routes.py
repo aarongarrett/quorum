@@ -505,6 +505,7 @@ def test_user_stream_sse(client, db_connection, monkeypatch):
     client.set_cookie(f"meeting_{m1_id}", chk_token)
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
+
     from app.blueprints.api import routes
 
     monkeypatch.setattr(
@@ -547,6 +548,7 @@ def test_admin_stream_sse(client, db_connection, monkeypatch, app):
     db_connection.commit()
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
+
     from app.blueprints.api import routes
 
     monkeypatch.setattr(

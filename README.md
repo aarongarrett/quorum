@@ -4,7 +4,7 @@
 ![E2E Tests](https://github.com/aarongarrett/quorum/actions/workflows/e2e.yml/badge.svg)
 ![CI & CD](https://github.com/aarongarrett/quorum/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/codecov/c/github/aarongarrett/quorum.svg?branch=main)
-![License](https://img.shields.io/github/license/aarongarrett/quorum.svg)
+![License](https://img.shields.io/github/license/aarongarrett/quorum)
 
 
 ## 1. Overview
@@ -238,7 +238,7 @@ Cookie: session=…
 * **400 Bad Request**
 
   ```json
-  { "message": "Name is required and must not be empty" }
+  { "message": "Name must not be empty" }
   ```
 * **500 Internal Server Error**
 
@@ -279,7 +279,7 @@ Content-Type: application/json
     "start_time": "2025-06-20T15:00:00Z",
     "end_time": "2025-06-20T17:00:00Z",
     "checked_in": true,
-    "elections": [ … ]
+    "polls": [ … ]
   },
   …
 ]
@@ -305,7 +305,7 @@ Content-Type: application/json
 * **400 Bad Request**
 
   ```json
-  { "message": "Meeting code is required and must not be empty" }
+  { "message": "Meeting code must not be empty" }
   ```
 * **404 Not Found**
 
@@ -337,7 +337,7 @@ Content-Type: application/json
 * **400 Bad Request**
 
   ```json
-  { "message": "Token is required and must not be empty" }
+  { "message": "Token must not be empty" }
   ```
 * **404 Not Found**
 

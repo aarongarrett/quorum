@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from flask import Blueprint
+from flask import (
+    Blueprint,
+)
 from flask import Response as FlaskResponse
 from flask import (
     abort,

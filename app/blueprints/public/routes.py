@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint
+from flask import (
+    Blueprint,
+)
 from flask import Response as FlaskResponse
 from flask import (
     current_app,

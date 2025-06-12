@@ -33,6 +33,7 @@ jobs:
     needs: lint
     env:
       TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     steps:
       - uses: actions/checkout@v3
     

@@ -19,7 +19,7 @@ def init_db(app):
     """Initialize the Flask-SQLAlchemy extension with the Flask app."""
     # If the env variable is set, we should use that because the config
     # variable is stale at this point.
-    db_uri = os.getenv("DATABASE_URL") or app.config.get("DATABASE_URL")
+    db_uri = os.getenv("QUORUM_DATABASE_URL") or app.config.get("DATABASE_URL")
     app.config["DATABASE_URL"] = db_uri
     if db_uri and db_uri.startswith("postgres://"):
         # Handle Heroku's postgres:// URL format

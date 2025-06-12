@@ -11,8 +11,8 @@ def on_test_start(environment, **kwargs):
     from dotenv import load_dotenv
     load_dotenv()
 
-    tz = ZoneInfo(os.getenv("APP_TIMEZONE", "America/New_York"))
-    admin_pwd = os.getenv("ADMIN_PASSWORD")
+    tz = ZoneInfo(os.getenv("QUORUM_TIMEZONE", "America/New_York"))
+    admin_pwd = os.getenv("QUORUM_ADMIN_PASSWORD")
     base_url = os.getenv("LOCUST_HOST")
 
     print("Clearing the current database...")

@@ -12,11 +12,11 @@ COMMON_DEPS = ["-rrequirements/dev.txt"]
 
 # Environment variables to propagate
 PASSED_ENV_VARS = [
-    "DATABASE_URL",
-    "FLASK_ENV",
-    "BASE_URL",
-    "SELENIUM_REMOTE_URL",
-    "ADMIN_PASSWORD",
+    "QUORUM_FLASK_SECRET",
+    "QUORUM_FLASK_ENV",
+    "QUORUM_ADMIN_PASSWORD",
+    "QUORUM_DATABASE_URL",
+    "QUORUM_TIMEZONE",
 ]
 
 

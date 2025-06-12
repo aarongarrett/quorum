@@ -13,7 +13,9 @@ from .utils import strftime
 
 def create_app(config_name: Optional[str] = None) -> Flask:
     if config_name is None:
-        config_name = os.getenv("FLASK_CONFIG", os.getenv("FLASK_ENV", "default"))
+        config_name = os.getenv(
+            "QUORUM_FLASK_CONFIG", os.getenv("QUORUM_FLASK_ENV", "default")
+        )
 
     app = Flask(__name__, instance_relative_config=False)
 

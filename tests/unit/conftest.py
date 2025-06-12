@@ -24,7 +24,7 @@ def app(pg_container):
     Create the Flask app configured to use the Postgres container.
     """
     # Point at our container
-    os.environ["DATABASE_URL"] = pg_container.get_connection_url()
+    os.environ["QUORUM_DATABASE_URL"] = pg_container.get_connection_url()
     app = create_app("testing")
     with app.app_context():
         yield app

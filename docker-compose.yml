@@ -5,10 +5,10 @@ services:
       dockerfile: Dockerfile.web
     restart: unless-stopped
     environment:
-      FLASK_ENV: production
-      DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      FLASK_SECRET: ${FLASK_SECRET}
+      QUORUM_FLASK_ENV: production
+      QUORUM_DATABASE_URL: postgresql://postgres:postgrespwd@db:5432/quorum
+      QUORUM_ADMIN_PASSWORD: ${QUORUM_ADMIN_PASSWORD}
+      QUORUM_FLASK_SECRET: ${QUORUM_FLASK_SECRET}
     volumes:
       - .:/app
     ports:

@@ -4,10 +4,10 @@ from zoneinfo import ZoneInfo
 
 
 class Config:
-    SECRET_KEY = os.getenv("FLASK_SECRET", "your-secret-key-here")
-    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "adminpass")
-    TIMEZONE = os.getenv("APP_TIMEZONE", "America/New_York")
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///quorum.db")
+    SECRET_KEY = os.getenv("QUORUM_FLASK_SECRET", "your-secret-key-here")
+    ADMIN_PASSWORD = os.getenv("QUORUM_ADMIN_PASSWORD", "adminpass")
+    TIMEZONE = os.getenv("QUORUM_TIMEZONE", "America/New_York")
+    DATABASE_URL = os.getenv("QUORUM_DATABASE_URL", "sqlite:///quorum.db")
     TZ = ZoneInfo(TIMEZONE)
     MEETING_DURATION_HOURS = 2
     PERMANENT_SESSION_LIFETIME = timedelta(hours=2)
@@ -18,10 +18,10 @@ class DevelopmentConfig(Config):
 
     load_dotenv()
     DEBUG = True
-    SECRET_KEY = os.getenv("FLASK_SECRET", "your-secret-key-here")
-    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "adminpass")
-    TIMEZONE = os.getenv("APP_TIMEZONE", "America/New_York")
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///quorum.db")
+    SECRET_KEY = os.getenv("QUORUM_FLASK_SECRET", "your-secret-key-here")
+    ADMIN_PASSWORD = os.getenv("QUORUM_ADMIN_PASSWORD", "adminpass")
+    TIMEZONE = os.getenv("QUORUM_TIMEZONE", "America/New_York")
+    DATABASE_URL = os.getenv("QUORUM_DATABASE_URL", "sqlite:///quorum.db")
     TZ = ZoneInfo(TIMEZONE)
 
 

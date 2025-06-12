@@ -8,7 +8,7 @@ env_path = find_dotenv()
 if env_path:
     load_dotenv(env_path, override=False)
 
-app = create_app(os.getenv("FLASK_ENV", "development"))
+app = create_app(os.getenv("QUORUM_FLASK_ENV", "development"))
 
 if __name__ == "__main__":
     app.run(debug=True)

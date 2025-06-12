@@ -21,12 +21,12 @@ def decode_qr_png(img_buffer: BytesIO) -> str:
     return barcode.text
 
 
-def test_qr_code_generation(authenticated_client, db_connection, app):
+def test_qr_code_generation(authenticated_client, db_session, app):
     """Test QR code generation for meetings"""
     # Create a test meeting
     start_time = datetime(2025, 5, 4, 11, 00, 0, 0).astimezone(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     # Test unauthenticated access
     with authenticated_client.session_transaction() as sess:
@@ -181,15 +181,15 @@ def test_admin_dashboard_unauthenticated(authenticated_client):
 
 
 def test_admin_dashboard_displays_meetings_and_polls(
-    authenticated_client, db_connection, app
+    authenticated_client, db_session, app
 ):
     """Test that the dashboard displays meetings and their polls"""
     # Create test data
     start_time = datetime(2025, 5, 4, 11, 00, 0, 0).astimezone(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
-    create_poll(db_connection, meeting_id, "Test Poll 1")
-    create_poll(db_connection, meeting_id, "Test Poll 2")
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
+    create_poll(db_session, meeting_id, "Test Poll 1")
+    create_poll(db_session, meeting_id, "Test Poll 2")
 
     # Log in as admin
     with authenticated_client.session_transaction() as sess:
@@ -213,7 +213,7 @@ def test_admin_dashboard_displays_meetings_and_polls(
     assert b"Test Poll 2" in response.data
 
 
-def test_admin_dashboard_no_meetings(authenticated_client, db_connection):
+def test_admin_dashboard_no_meetings(authenticated_client, db_session):
     """Test dashboard when there are no meetings"""
     # Log in as admin
     with authenticated_client.session_transaction() as sess:
@@ -227,7 +227,7 @@ def test_admin_dashboard_no_meetings(authenticated_client, db_connection):
     assert b"No meetings found" in response.data
 
 
-def test_admin_dashboard_multiple_meetings(authenticated_client, db_connection, app):
+def test_admin_dashboard_multiple_meetings(authenticated_client, db_session, app):
     """Test dashboard with multiple meetings"""
     # Create multiple test meetings
     now = datetime(2025, 5, 4, 11, 00, 0, 0).astimezone(app.config["TZ"])
@@ -235,16 +235,12 @@ def test_admin_dashboard_multiple_meetings(authenticated_client, db_connection, 
     meeting1_end_time = now + timedelta(hours=2)
     meeting2_start_time = now + timedelta(days=1)
     meeting2_end_time = now + timedelta(days=1, hours=2)
-    meeting1_id, _ = create_meeting(
-        db_connection, meeting1_start_time, meeting1_end_time
-    )
-    meeting2_id, _ = create_meeting(
-        db_connection, meeting2_start_time, meeting2_end_time
-    )
+    meeting1_id, _ = create_meeting(db_session, meeting1_start_time, meeting1_end_time)
+    meeting2_id, _ = create_meeting(db_session, meeting2_start_time, meeting2_end_time)
 
     # Add polls to second meeting
-    create_poll(db_connection, meeting2_id, "Future Poll 1")
-    create_poll(db_connection, meeting2_id, "Future Poll 2")
+    create_poll(db_session, meeting2_id, "Future Poll 1")
+    create_poll(db_session, meeting2_id, "Future Poll 2")
 
     # Log in as admin
     with authenticated_client.session_transaction() as sess:
@@ -311,8 +307,6 @@ def test_meeting_creation_success(authenticated_client, app):
         follow_redirects=True,
     )
 
-    print(response.data)
-
     assert response.status_code == 200
     assert b"Meeting created" in response.data
 
@@ -332,12 +326,12 @@ def test_meeting_creation_invalid_data(authenticated_client):
     assert b"Invalid date/time format" in response.data
 
 
-def test_meeting_deletion(authenticated_client, db_connection, app):
+def test_meeting_deletion(authenticated_client, db_session, app):
     """Test deleting an existing meeting"""
     # Create a meeting to delete
     start_time = datetime(2025, 5, 4, 11, 00, 0, 0).astimezone(app.config["TZ"])
     end_time = start_time + timedelta(hours=1)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     with authenticated_client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -350,12 +344,12 @@ def test_meeting_deletion(authenticated_client, db_connection, app):
     assert b"Meeting deleted" in response.data
 
 
-def test_meeting_deletion_via_post(authenticated_client, db_connection, app):
+def test_meeting_deletion_via_post(authenticated_client, db_session, app):
     """Test deleting an existing meeting"""
     # Create a meeting to delete
     start_time = datetime(2025, 5, 4, 11, 00, 0, 0).astimezone(app.config["TZ"])
     end_time = start_time + timedelta(hours=1)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     with authenticated_client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -371,13 +365,13 @@ def test_meeting_deletion_via_post(authenticated_client, db_connection, app):
 
 
 def test_meeting_deletion_via_post_without_override(
-    authenticated_client, db_connection, app
+    authenticated_client, db_session, app
 ):
     """Test deleting an existing meeting"""
     # Create a meeting to delete
     start_time = datetime(2025, 5, 4, 11, 00, 0, 0).astimezone(app.config["TZ"])
     end_time = start_time + timedelta(hours=1)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     with authenticated_client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -390,12 +384,12 @@ def test_meeting_deletion_via_post_without_override(
     assert response.status_code == 405
 
 
-def test_poll_create_form_unauthenticated(authenticated_client, db_connection, app):
+def test_poll_create_form_unauthenticated(authenticated_client, db_session, app):
     """Test that unauthenticated users cannot access the poll creation form"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Clear session to simulate unauthenticated user
     with authenticated_client.session_transaction() as sess:
@@ -407,12 +401,12 @@ def test_poll_create_form_unauthenticated(authenticated_client, db_connection, a
     assert "/admin/login" in response.headers["Location"]
 
 
-def test_poll_create_form_authenticated(authenticated_client, db_connection, app):
+def test_poll_create_form_authenticated(authenticated_client, db_session, app):
     """Test that authenticated admins can access the poll creation form"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
@@ -425,12 +419,12 @@ def test_poll_create_form_authenticated(authenticated_client, db_connection, app
     assert b"Name" in response.data
 
 
-def test_poll_creation_success(authenticated_client, db_connection, app):
+def test_poll_creation_success(authenticated_client, db_session, app):
     """Test creating an poll with valid data"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
@@ -448,12 +442,12 @@ def test_poll_creation_success(authenticated_client, db_connection, app):
     assert b"Poll created" in response.data
 
 
-def test_poll_creation_invalid_data(authenticated_client, db_connection, app):
+def test_poll_creation_invalid_data(authenticated_client, db_session, app):
     """Test creating an poll with invalid data"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
@@ -469,15 +463,15 @@ def test_poll_creation_invalid_data(authenticated_client, db_connection, app):
     assert b"Poll name cannot be empty" in response.data
 
 
-def test_poll_deletion(authenticated_client, db_connection, app):
+def test_poll_deletion(authenticated_client, db_session, app):
     """Test deleting an existing poll"""
     # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Create an poll
-    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
+    poll_id = create_poll(db_session, meeting_id, "Test Poll")
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
@@ -492,15 +486,15 @@ def test_poll_deletion(authenticated_client, db_connection, app):
     assert b"Poll deleted" in response.data
 
 
-def test_poll_deletion_via_post(authenticated_client, db_connection, app):
+def test_poll_deletion_via_post(authenticated_client, db_session, app):
     """Test deleting an existing poll"""
     # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Create an poll
-    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
+    poll_id = create_poll(db_session, meeting_id, "Test Poll")
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:
@@ -516,17 +510,15 @@ def test_poll_deletion_via_post(authenticated_client, db_connection, app):
     assert b"Poll deleted" in response.data
 
 
-def test_poll_deletion_via_post_without_override(
-    authenticated_client, db_connection, app
-):
+def test_poll_deletion_via_post_without_override(authenticated_client, db_session, app):
     """Test deleting an existing poll"""
     # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"]) + timedelta(hours=1)
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Create an poll
-    poll_id = create_poll(db_connection, meeting_id, "Test Poll")
+    poll_id = create_poll(db_session, meeting_id, "Test Poll")
 
     # Login as admin
     with authenticated_client.session_transaction() as sess:

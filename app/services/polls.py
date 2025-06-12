@@ -37,7 +37,7 @@ def create_poll(db: Session, meeting_id: int, poll_name: str) -> int:
         )
 
         if existing_poll is not None:
-            raise ValueError("An poll with this name already exists in this meeting")
+            raise ValueError("A poll with this name already exists in this meeting")
 
         poll = Poll(meeting_id=meeting_id, name=poll_name)
 
@@ -74,8 +74,8 @@ def delete_poll(db: Session, meeting_id: int, poll_id: int) -> bool:
             .one()
         )
 
-        # Cascade delete will handle related votes due to the cascade="all, delete-orphan"
-        # in the relationship definition
+        # Cascade delete will handle related votes due to the
+        # cascade="all, delete-orphan" in the relationship definition
         db.delete(poll)
         db.commit()
         return True
@@ -248,7 +248,7 @@ def get_user_votes(
         token: The vote token to filter by
 
     Returns:
-        dict[int, dict[str, str]]: A dictionary mapping poll IDs to names and votes.
+        dict[int, dict[str, str]]: A dictionary of poll IDs to names/votes.
         Returns an empty dict if no votes exist for the given token.
     """
     # First verify the token has checked in to the meeting

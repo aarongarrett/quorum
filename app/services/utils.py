@@ -17,7 +17,8 @@ def to_utc(dt: datetime) -> datetime:
 def make_pronounceable(length: int = 8) -> str:
     """Generate a pronounceable token of the specified length
 
-    The token alternates between consonants and vowels to make it easier to read and say.
+    The token alternates between consonants and vowels to make it
+    easier to read and say.
 
     Args:
         length: The length of the token to generate

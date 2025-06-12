@@ -1,11 +1,13 @@
-# Quorum Web Application
+# Quorum
+
+[![CI & CD](https://github.com/aarongarrett/quorum/actions/workflows/ci.yml/badge.svg)](https://github.com/aarongarrett/quorum/actions/workflows/ci.yml)
 
 A Flask-based web application with PostgreSQL database, using Docker for containerization and deployment. The application includes comprehensive testing with Tox, including unit tests and end-to-end tests with Selenium.
 
 ## Prerequisites
 
 - Docker and Docker Compose
-- Python 3.8+
+- Python 3.10+
 - Chrome browser (for local development with Selenium)
 
 ## Project Structure

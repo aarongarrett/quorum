@@ -94,4 +94,4 @@ def test_vote_in_poll(user_meeting, browser, base_url):
     user_home.submit_vote()
 
     # Verify vote was recorded
-    assert user_home.is_vote_confirmed(), "Vote confirmation should be displayed"
+    assert user_home.is_vote_confirmed(), "Vote confirmation should be visible"

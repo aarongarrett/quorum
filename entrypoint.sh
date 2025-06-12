@@ -9,4 +9,4 @@ flask db upgrade
 
 # Start the Flask app using Gunicorn, specifying the factory function
 echo "Starting web server..."
-exec gunicorn 'run:create_app()'
+exec gunicorn 'app:create_app()'

@@ -8,7 +8,7 @@ def strftime(value: datetime | str, format: str = "%B %d, %Y %I:%M%p") -> str:
     """Format a datetime object or string into a human-readable format.
 
     Args:
-        value: Either a datetime object or a string that can be parsed into a datetime
+        value: A datetime object or a string that can be parsed into a datetime
         format: The strftime format string to use for formatting
 
     Returns:

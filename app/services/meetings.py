@@ -86,7 +86,8 @@ def create_meeting(
         except IntegrityError as e:
             db.rollback()
             # Check if error is due to duplicate meeting_code
-            if "UNIQUE constraint failed: meetings.meeting_code" in str(e.orig):
+            unique_error = "UNIQUE constraint failed: meetings.meeting_code"
+            if unique_error in str(e.orig):
                 continue
             raise
 
@@ -108,8 +109,8 @@ def delete_meeting(db: Session, meeting_id: int) -> bool:
         # This will raise NoResultFound if meeting doesn't exist
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).one()
 
-        # Cascade delete will handle related records due to the cascade="all, delete-orphan"
-        # in the relationship definitions
+        # Cascade delete will handle related records due to the
+        # cascade="all, delete-orphan" in the relationship definitions
         db.delete(meeting)
         db.commit()
         return True

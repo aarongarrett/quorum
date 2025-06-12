@@ -40,8 +40,8 @@ def test_create_meeting(browser, base_url, admin_user):
     # Fill out meeting form
     meeting_date = datetime.now() + timedelta(days=7)
     meeting_time = "14:00"
-
-    browser.find_element(By.NAME, "date").send_keys(meeting_date.strftime("%m/%d/%Y"))
+    meeting_date_str = meeting_date.strftime("%m/%d/%Y")
+    browser.find_element(By.NAME, "date").send_keys(meeting_date_str)
     browser.find_element(By.NAME, "time").send_keys(meeting_time)
 
     # Submit form
@@ -53,7 +53,8 @@ def test_create_meeting(browser, base_url, admin_user):
     assert "Meeting created (code:" in browser.page_source
 
     # Verify meeting appears in the dashboard
-    assert meeting_date.strftime("%B %-d, %Y") in browser.page_source
+    mstr = meeting_date.strftime("%B {day}, %Y").format(day=meeting_date.day)
+    assert mstr in browser.page_source
 
 
 def test_create_poll(browser, base_url, admin_user, admin_meeting):
@@ -70,11 +71,13 @@ def test_create_poll(browser, base_url, admin_user, admin_meeting):
             (By.CSS_SELECTOR, f"[data-meeting-id='{meeting_id}']")
         )
     )
+
     create_poll_btn = WebDriverWait(browser, 5).until(
         EC.presence_of_element_located(
             (By.XPATH, ".//a[contains(normalize-space(.), 'Create Poll')]")
         )
     )
+
     create_poll_btn.click()
 
     # Fill out poll form
@@ -139,9 +142,9 @@ def test_delete_poll(browser, base_url, admin_user, admin_meeting):
     # Use JavaScript to ensure modal is visible
     WebDriverWait(browser, 10).until(
         lambda d: d.execute_script(
-            'return window.getComputedStyle(arguments[0]).display !== "none" && '  # Modal is displayed
-            'window.getComputedStyle(arguments[0]).visibility !== "hidden" && '  # Modal is visible
-            'document.querySelector(".modal-backdrop") !== null',  # Backdrop exists
+            'return window.getComputedStyle(arguments[0]).display !== "none" && '
+            'window.getComputedStyle(arguments[0]).visibility !== "hidden" && '
+            'document.querySelector(".modal-backdrop") !== null',
             modal,
         )
     )
@@ -198,9 +201,9 @@ def test_delete_meeting(browser, base_url, admin_user, admin_meeting):
     # Use JavaScript to ensure modal is visible
     WebDriverWait(browser, 10).until(
         lambda d: d.execute_script(
-            'return window.getComputedStyle(arguments[0]).display !== "none" && '  # Modal is displayed
-            'window.getComputedStyle(arguments[0]).visibility !== "hidden" && '  # Modal is visible
-            'document.querySelector(".modal-backdrop") !== null',  # Backdrop exists
+            'return window.getComputedStyle(arguments[0]).display !== "none" && '
+            'window.getComputedStyle(arguments[0]).visibility !== "hidden" && '
+            'document.querySelector(".modal-backdrop") !== null',
             modal,
         )
     )

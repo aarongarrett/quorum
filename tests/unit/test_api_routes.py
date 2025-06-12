@@ -6,19 +6,19 @@ from app.models import Checkin, Poll, PollVote
 from app.services import checkin, create_meeting
 
 
-def test_api_meetings_get_checked_in_status(client, db_connection, app):
+def test_api_meetings_get_checked_in_status(client, db_session, app):
     """Test GET /api/meetings reflects check-in status based on session"""
     # 1. Create a test meeting and check-in
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     poll = Poll(meeting_id=meeting_id, name="Test Poll")
-    db_connection.add(poll)
-    db_connection.flush()
+    db_session.add(poll)
+    db_session.flush()
 
     # Perform check-in to obtain token
-    token = checkin(db_connection, meeting_id, meeting_code)
+    token = checkin(db_session, meeting_id, meeting_code)
 
     # Manually store the token in session to simulate a user with a valid token
     with client.session_transaction() as sess:
@@ -38,19 +38,19 @@ def test_api_meetings_get_checked_in_status(client, db_connection, app):
     assert matching[0]["polls"][0]["id"] == poll.id
 
 
-def test_api_meetings_post_with_token_map(client, db_connection, app):
+def test_api_meetings_post_with_token_map(client, db_session, app):
     """Test POST /api/meetings accepts token map and returns polls if valid"""
     # 1. Create meeting and check-in
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     poll = Poll(meeting_id=meeting_id, name="Test Poll")
-    db_connection.add(poll)
-    db_connection.flush()
+    db_session.add(poll)
+    db_session.flush()
 
     # Perform check-in to obtain token
-    token = checkin(db_connection, meeting_id, meeting_code)
+    token = checkin(db_session, meeting_id, meeting_code)
 
     # 2. POST to /api/meetings with the token
     response = client.post("/api/meetings", json={str(meeting_id): token})
@@ -66,15 +66,15 @@ def test_api_meetings_post_with_token_map(client, db_connection, app):
     assert matching[0]["polls"][0]["id"] == poll.id
 
 
-def test_api_meetings_post_with_invalid_token_map(client, db_connection, app):
+def test_api_meetings_post_with_invalid_token_map(client, db_session, app):
     """Test POST /api/meetings accepts token map and returns polls if valid"""
     # 1. Create meeting and check-in
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     # Perform check-in to obtain token
-    token = checkin(db_connection, meeting_id, meeting_code)
+    token = checkin(db_session, meeting_id, meeting_code)
 
     # 2. POST to /api/meetings with the invalid token map
     response = client.post("/api/meetings", json={str("Invalid ID"): token})
@@ -86,15 +86,15 @@ def test_api_meetings_post_with_invalid_token_map(client, db_connection, app):
     assert data["error"] == "Invalid token map"
 
 
-def test_api_meetings_wrong_token_for_meeting(client, db_connection, app):
+def test_api_meetings_wrong_token_for_meeting(client, db_session, app):
     """Token issued for Meeting A should not allow access to Meeting B"""
     # Create two meetings
     now = datetime.now(app.config["TZ"])
-    m1_id, m1_code = create_meeting(db_connection, now, now + timedelta(hours=1))
-    m2_id, m2_code = create_meeting(db_connection, now, now + timedelta(hours=1))
+    m1_id, m1_code = create_meeting(db_session, now, now + timedelta(hours=1))
+    m2_id, m2_code = create_meeting(db_session, now, now + timedelta(hours=1))
 
     # Check in to Meeting A
-    token = checkin(db_connection, m1_id, m1_code)
+    token = checkin(db_session, m1_id, m1_code)
 
     # POST to /api/meetings with token for wrong meeting
     response = client.post("/api/meetings", json={str(m2_id): token})
@@ -107,13 +107,11 @@ def test_api_meetings_wrong_token_for_meeting(client, db_connection, app):
     assert match[0]["checked_in"] is False
 
 
-def test_api_meetings_invalid_token(client, db_connection, app):
+def test_api_meetings_invalid_token(client, db_session, app):
     """Invalid token should not grant access"""
     # Create a meeting
     now = datetime.now(app.config["TZ"])
-    meeting_id, meeting_code = create_meeting(
-        db_connection, now, now + timedelta(hours=1)
-    )
+    meeting_id, meeting_code = create_meeting(db_session, now, now + timedelta(hours=1))
 
     # Use a made-up token
     fake_token = "INVALID8"
@@ -128,15 +126,13 @@ def test_api_meetings_invalid_token(client, db_connection, app):
     assert match[0]["checked_in"] is False
 
 
-def test_api_meetings_no_polls(client, db_connection, app):
+def test_api_meetings_no_polls(client, db_session, app):
     """Meeting with no polls should still return empty polls list"""
     # Create meeting and check in
     now = datetime.now(app.config["TZ"])
-    meeting_id, meeting_code = create_meeting(
-        db_connection, now, now + timedelta(hours=1)
-    )
+    meeting_id, meeting_code = create_meeting(db_session, now, now + timedelta(hours=1))
 
-    token = checkin(db_connection, meeting_id, meeting_code)
+    token = checkin(db_session, meeting_id, meeting_code)
 
     # POST with valid token
     response = client.post("/api/meetings", json={str(meeting_id): token})
@@ -150,12 +146,12 @@ def test_api_meetings_no_polls(client, db_connection, app):
     assert len(match[0]["polls"]) == 0
 
 
-def test_api_checkin_success(client, db_connection, app):
+def test_api_checkin_success(client, db_session, app):
     """Test successful check-in via API"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     # Test successful check-in
     response = client.post(
@@ -170,7 +166,7 @@ def test_api_checkin_success(client, db_connection, app):
 
     # Verify the check-in was recorded in the database
     checkin = (
-        db_connection.query(Checkin)
+        db_session.query(Checkin)
         .filter(
             Checkin.meeting_id == meeting_id,
             Checkin.vote_token == response.json["token"],
@@ -180,12 +176,12 @@ def test_api_checkin_success(client, db_connection, app):
     assert checkin is not None
 
 
-def test_api_checkin_invalid_meeting_id(client, db_connection, app):
+def test_api_checkin_invalid_meeting_id(client, db_session, app):
     """Test API check-in with invalid meeting ID"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    _, meeting_code = create_meeting(db_connection, start_time, end_time)
+    _, meeting_code = create_meeting(db_session, start_time, end_time)
 
     # Test with non-existent meeting ID
     response = client.post(
@@ -198,12 +194,12 @@ def test_api_checkin_invalid_meeting_id(client, db_connection, app):
     assert "Meeting not found" in response.json["error"]
 
 
-def test_api_checkin_invalid_meeting_code(client, db_connection, app):
+def test_api_checkin_invalid_meeting_code(client, db_session, app):
     """Test API check-in with invalid meeting code"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Test with invalid meeting code
     response = client.post(
@@ -216,12 +212,12 @@ def test_api_checkin_invalid_meeting_code(client, db_connection, app):
     assert "Invalid meeting code" in response.json["error"]
 
 
-def test_api_checkin_meeting_ended(client, db_connection, app):
+def test_api_checkin_meeting_ended(client, db_session, app):
     """Test API check-in for a meeting that has already ended"""
     # Create a meeting that has already ended
     start_time = datetime.now(app.config["TZ"]) - timedelta(hours=2)
     end_time = datetime.now(app.config["TZ"]) - timedelta(hours=1)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     # Try to check in
     response = client.post(
@@ -234,12 +230,12 @@ def test_api_checkin_meeting_ended(client, db_connection, app):
     assert "Meeting is not available" in response.json["error"]
 
 
-def test_api_checkin_missing_meeting_code(client, db_connection, app):
+def test_api_checkin_missing_meeting_code(client, db_session, app):
     """Test API check-in with missing meeting code"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     # Test with empty meeting code
     response = client.post(
@@ -250,12 +246,12 @@ def test_api_checkin_missing_meeting_code(client, db_connection, app):
     assert response.status_code == 400
 
 
-def test_api_checkin_server_error(client, db_connection, monkeypatch, app):
+def test_api_checkin_server_error(client, db_session, monkeypatch, app):
     """Test API check-in when a server error occurs"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     # Mock the checkin function to raise an exception
     def mock_checkin(*args, **kwargs):
@@ -276,20 +272,20 @@ def test_api_checkin_server_error(client, db_connection, monkeypatch, app):
     assert "Database error" in response.json["error"]
 
 
-def test_api_vote_success(client, db_connection, app):
+def test_api_vote_success(client, db_session, app):
     """Test successful vote submission via API"""
     # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, meeting_code = create_meeting(db_connection, start_time, end_time)
+    meeting_id, meeting_code = create_meeting(db_session, start_time, end_time)
 
     # Create an poll
     poll = Poll(meeting_id=meeting_id, name="Test Poll")
-    db_connection.add(poll)
-    db_connection.flush()
+    db_session.add(poll)
+    db_session.flush()
 
     # Create a check-in to get a valid token
-    token = checkin(db_connection, meeting_id, meeting_code)
+    token = checkin(db_session, meeting_id, meeting_code)
 
     response = client.post(
         f"/api/meetings/{meeting_id}/polls/{poll.id}/votes",
@@ -300,16 +296,16 @@ def test_api_vote_success(client, db_connection, app):
     assert response.json == {"success": True}
 
 
-def test_api_vote_invalid_token(client, db_connection, app):
+def test_api_vote_invalid_token(client, db_session, app):
     """Test vote submission with invalid token"""
     # Create a test meeting and poll
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     poll = Poll(meeting_id=meeting_id, name="Test Poll")
-    db_connection.add(poll)
-    db_connection.flush()
+    db_session.add(poll)
+    db_session.flush()
 
     response = client.post(
         f"/api/meetings/{meeting_id}/polls/{poll.id}/votes",
@@ -425,12 +421,12 @@ def test_api_create_meeting_missing_times(client):
     assert response.status_code == 400
 
 
-def test_api_create_poll_success(client, db_connection, app):
+def test_api_create_poll_success(client, db_session, app):
     """Test successful poll creation via API"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     with client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -444,12 +440,12 @@ def test_api_create_poll_success(client, db_connection, app):
     assert isinstance(response.json["poll_id"], int)
 
 
-def test_api_create_poll_unauthorized(client, db_connection, app):
+def test_api_create_poll_unauthorized(client, db_session, app):
     """Test poll creation without admin privileges"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
     response = client.post(
         f"/api/admin/meetings/{meeting_id}/polls",
         json={"name": "Test Poll"},
@@ -459,12 +455,12 @@ def test_api_create_poll_unauthorized(client, db_connection, app):
     assert "Unauthorized" in response.json["error"]
 
 
-def test_api_create_poll_missing_name(client, db_connection, app):
+def test_api_create_poll_missing_name(client, db_session, app):
     """Test successful poll creation via API"""
     # Create a test meeting
     start_time = datetime.now(app.config["TZ"])
     end_time = start_time + timedelta(hours=2)
-    meeting_id, _ = create_meeting(db_connection, start_time, end_time)
+    meeting_id, _ = create_meeting(db_session, start_time, end_time)
 
     with client.session_transaction() as sess:
         sess["is_admin"] = True
@@ -488,20 +484,20 @@ def test_api_create_poll_invalid_meeting(client):
     assert response.status_code == 500
 
 
-def test_user_stream_sse(client, db_connection, monkeypatch):
+def test_user_stream_sse(client, db_session, monkeypatch):
     import json
     import time
 
     tz = timezone.utc
     now = datetime.now(tz)
     m1_id, m1_code = create_meeting(
-        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
+        db_session, now - timedelta(minutes=1), now + timedelta(hours=1)
     )
     m2_id, m2_code = create_meeting(
-        db_connection, now - timedelta(hours=3), now - timedelta(hours=2)
+        db_session, now - timedelta(hours=3), now - timedelta(hours=2)
     )
 
-    chk_token = checkin(db_connection, m1_id, m1_code)
+    chk_token = checkin(db_session, m1_id, m1_code)
     client.set_cookie(f"meeting_{m1_id}", chk_token)
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
@@ -511,7 +507,7 @@ def test_user_stream_sse(client, db_connection, monkeypatch):
     monkeypatch.setattr(
         routes,
         "sessionmaker",
-        lambda bind=None, **kw: (lambda *args, **kwargs: db_connection),
+        lambda bind=None, **kw: (lambda *args, **kwargs: db_session),
     )
 
     with client.get("/api/meetings/stream") as resp:
@@ -529,23 +525,23 @@ def test_user_stream_sse(client, db_connection, monkeypatch):
         assert len(data[0]["polls"]) == 0
 
 
-def test_admin_stream_sse(client, db_connection, monkeypatch, app):
+def test_admin_stream_sse(client, db_session, monkeypatch, app):
     # seed an admin session
     with client.session_transaction() as sess:
         sess["is_admin"] = True
 
     now = datetime.now(timezone.utc)
     m_id, _ = create_meeting(
-        db_connection, now - timedelta(minutes=1), now + timedelta(hours=1)
+        db_session, now - timedelta(minutes=1), now + timedelta(hours=1)
     )
     # create an poll and some votes
     poll = Poll(meeting_id=m_id, name="Test")
-    db_connection.add(poll)
-    db_connection.flush()
+    db_session.add(poll)
+    db_session.flush()
     # cast votes
     for i, opt in enumerate(["A", "B", "A"]):
-        db_connection.add(PollVote(poll_id=poll.id, vote=opt, vote_token=f"T{i}"))
-    db_connection.commit()
+        db_session.add(PollVote(poll_id=poll.id, vote=opt, vote_token=f"T{i}"))
+    db_session.commit()
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
 
@@ -554,7 +550,7 @@ def test_admin_stream_sse(client, db_connection, monkeypatch, app):
     monkeypatch.setattr(
         routes,
         "sessionmaker",
-        lambda bind=None, **kw: (lambda *args, **kwargs: db_connection),
+        lambda bind=None, **kw: (lambda *args, **kwargs: db_session),
     )
 
     with client.get("/api/admin/meetings/stream") as resp:

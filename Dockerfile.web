@@ -8,11 +8,11 @@ RUN pip install --upgrade pip && \
     pip install gunicorn gevent
 
 COPY app/ ./app/
+COPY migrations ./migrations
 COPY config.py ./config.py
 COPY gunicorn.conf.py ./gunicorn.conf.py
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
-COPY migrations ./migrations
 
 ENV FLASK_ENV=production
 ENV FLASK_APP="app:create_app"

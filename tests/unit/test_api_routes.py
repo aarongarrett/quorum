@@ -78,12 +78,13 @@ def test_api_meetings_post_with_invalid_token_map(client, db_session, app):
 
     # 2. POST to /api/meetings with the invalid token map
     response = client.post("/api/meetings", json={str("Invalid ID"): token})
+
     assert response.status_code == 400
     data = response.get_json()
 
     # 3. Verify returned meeting reflects the token-based access
-    assert "error" in data
-    assert data["error"] == "Invalid token map"
+    assert "message" in data
+    assert data["message"] == "Invalid token map"
 
 
 def test_api_meetings_wrong_token_for_meeting(client, db_session, app):
@@ -190,8 +191,8 @@ def test_api_checkin_invalid_meeting_id(client, db_session, app):
 
     # Verify response
     assert response.status_code == 404
-    assert "error" in response.json
-    assert "Meeting not found" in response.json["error"]
+    assert "message" in response.json
+    assert "Meeting not found" in response.json["message"]
 
 
 def test_api_checkin_invalid_meeting_code(client, db_session, app):
@@ -208,8 +209,8 @@ def test_api_checkin_invalid_meeting_code(client, db_session, app):
 
     # Verify response
     assert response.status_code == 404
-    assert "error" in response.json
-    assert "Invalid meeting code" in response.json["error"]
+    assert "message" in response.json
+    assert "Invalid meeting code" in response.json["message"]
 
 
 def test_api_checkin_meeting_ended(client, db_session, app):
@@ -225,9 +226,9 @@ def test_api_checkin_meeting_ended(client, db_session, app):
     )
 
     # Verify response
-    assert response.status_code == 404  # or 400, depending on your error handling
-    assert "error" in response.json
-    assert "Meeting is not available" in response.json["error"]
+    assert response.status_code == 404
+    assert "message" in response.json
+    assert "Meeting is not available" in response.json["message"]
 
 
 def test_api_checkin_missing_meeting_code(client, db_session, app):
@@ -268,8 +269,8 @@ def test_api_checkin_server_error(client, db_session, monkeypatch, app):
 
     # Verify response
     assert response.status_code == 500
-    assert "error" in response.json
-    assert "Database error" in response.json["error"]
+    assert "message" in response.json
+    assert "Database error" in response.json["message"]
 
 
 def test_api_vote_success(client, db_session, app):
@@ -313,7 +314,8 @@ def test_api_vote_invalid_token(client, db_session, app):
     )
 
     assert response.status_code == 404
-    assert "error" in response.json
+    assert "message" in response.json
+    assert "Invalid token" in response.json["message"]
 
 
 def test_api_vote_missing_fields(client):
@@ -353,8 +355,8 @@ def test_api_login_no_password(client, app):
     response = client.post("/api/login", json={"pwd": app.config["ADMIN_PASSWORD"]})
 
     assert response.status_code == 400
-    assert "error" in response.json
-    assert response.json["error"] == "Password is required"
+    assert "message" in response.json
+    assert "Input payload validation failed" in response.json["message"]
     with client.session_transaction() as sess:
         assert sess["is_admin"] is False
 
@@ -367,8 +369,8 @@ def test_api_login_wrong_password(client, app):
     response = client.post("/api/login", json={"password": "INVALID_PWD"})
 
     assert response.status_code == 400
-    assert "error" in response.json
-    assert response.json["error"] == "Invalid password"
+    assert "message" in response.json
+    assert response.json["message"] == "Invalid password"
     with client.session_transaction() as sess:
         assert sess["is_admin"] is False
 
@@ -385,6 +387,8 @@ def test_api_create_meeting_success(client, app):
         "/api/admin/meetings", json={"start_time": start_time, "end_time": end_time}
     )
 
+    print(response)
+
     assert response.status_code == 201
     assert "meeting_id" in response.json
     assert "meeting_code" in response.json
@@ -399,8 +403,8 @@ def test_api_create_meeting_unauthorized(client):
         json={"start_time": "2023-01-01T10:00:00", "end_time": "2023-01-01T12:00:00"},
     )
     assert response.status_code == 403
-    assert "error" in response.json
-    assert "Unauthorized" in response.json["error"]
+    assert "message" in response.json
+    assert "Unauthorized" in response.json["message"]
 
 
 def test_api_create_meeting_missing_times(client):
@@ -451,8 +455,8 @@ def test_api_create_poll_unauthorized(client, db_session, app):
         json={"name": "Test Poll"},
     )
     assert response.status_code == 403
-    assert "error" in response.json
-    assert "Unauthorized" in response.json["error"]
+    assert "message" in response.json
+    assert "Unauthorized" in response.json["message"]
 
 
 def test_api_create_poll_missing_name(client, db_session, app):
@@ -468,8 +472,8 @@ def test_api_create_poll_missing_name(client, db_session, app):
     response = client.post(f"/api/admin/meetings/{meeting_id}/polls", json={"name": ""})
 
     assert response.status_code == 400
-    assert "error" in response.json
-    assert "Name is required and must not be empty" in response.json["error"]
+    assert "message" in response.json
+    assert "Name must not be empty" in response.json["message"]
 
 
 def test_api_create_poll_invalid_meeting(client):

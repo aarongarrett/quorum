@@ -15,6 +15,10 @@ def test_home_route_shows_meetings(client, db_session, app):
 
     # Test home page
     response = client.get("/")
+
+    print(response)
+    print(response.data)
+
     assert response.status_code == 200
 
     # The meetings are now loaded via JavaScript, so we can't test the full page load.

@@ -1,11 +1,12 @@
 import os
 from typing import Optional
 
-from flask import Flask
+from flask import Blueprint, Flask
 from flask_migrate import Migrate
+from flask_restx import Api
 
 from .blueprints.admin.routes import admin_bp
-from .blueprints.api.routes import api_bp
+from .blueprints.api.routes import api as api_namespace
 from .blueprints.public.routes import public_bp
 from .database import db, init_db
 from .utils import strftime
@@ -32,6 +33,17 @@ def create_app(config_name: Optional[str] = None) -> Flask:
     Migrate(app, db, directory="migrations")
 
     app.add_template_filter(strftime, name="strftime")
+
+    # Register API routes
+    api_bp = Blueprint("api", __name__)
+    restx_api = Api(
+        api_bp,
+        version="1.0",
+        title="Quorum Voting API",
+        description="Anonymous, session-based voting",
+        doc="/docs",  # Swagger UI at /api/docs
+    )
+    restx_api.add_namespace(api_namespace)
 
     # Register blueprints
     app.register_blueprint(api_bp, url_prefix="/api")

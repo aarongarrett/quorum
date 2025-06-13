@@ -28,7 +28,7 @@ jobs:
         run: nox -s lint
 
   unit-tests:
-    name: 🚦 Unit Tests
+    name: 🚥 Unit Tests
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -46,3 +46,9 @@ jobs:
 
       - name: Run unit session
         run: nox -s unit
+
+      - name: Upload coverage to Coveralls
+        run: coveralls --service=github-actions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}

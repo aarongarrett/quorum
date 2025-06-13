@@ -4,6 +4,7 @@ pytest-mock==3.14.1
 pytest-cov==4.1.0
 testcontainers[postgres,compose]==4.10.0
 coverage==7.3.2
+coveralls==4.0.1
 selenium==4.16.0
 webdriver-manager==3.9.0
 Pillow==10.1.0

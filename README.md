@@ -3,8 +3,8 @@
 ![Unit Tests](https://github.com/aarongarrett/quorum/actions/workflows/unit.yml/badge.svg)
 ![E2E Tests](https://github.com/aarongarrett/quorum/actions/workflows/e2e.yml/badge.svg)
 ![CI & CD](https://github.com/aarongarrett/quorum/actions/workflows/ci.yml/badge.svg)
-![Coverage](https://img.shields.io/codecov/c/github/aarongarrett/quorum.svg?branch=main)
-![License](https://img.shields.io/github/license/aarongarrett/quorum)
+![Coveralls](https://img.shields.io/coverallsCoverage/github/aarongarrett/quorum)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
 ## 1. Overview

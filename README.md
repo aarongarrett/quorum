@@ -48,7 +48,7 @@ docker-compose up -d
 
 ### 3.3 First poll in 5 minutes
 1. Visit http://localhost:5000/admin
-2. Log in (use "adminpass" if `ADMIN_PASSWORD` isn't set in the environment)
+2. Log in (use "adminpass" if `QUORUM_ADMIN_PASSWORD` isn't set in the environment)
 3. Create Meeting → copy meeting code
 4. Create Poll
 5. Visit http://localhost:5000

@@ -73,6 +73,7 @@ def unit(session):
         "--cov=app",
         "--cov-report=term-missing",
         "--cov-report=html:" + htmlcov_path,
+        "--cov-report=xml",
         "--cov-fail-under=80",
     )
 

@@ -8,28 +8,55 @@ on:
   workflow_dispatch:
 
 jobs:
-  verify:
-    name: 🎯 Verify
+  verify-backend:
+    name: 🎯 Verify Backend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
-      - name: Install dev dependencies
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements/dev.txt
+          pip install -r requirements-dev.txt
 
-      - name: Run verify session
-        run: nox
+      - name: Run all backend tests
+        run: pytest -v
+        env:
+          REDIS_URL: memory://
+
+  verify-frontend:
+    name: 🎨 Verify Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test -- --watchAll=false
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
   publish:
     name: 🚀 Build & Push Docker Image
-    needs: verify
+    needs: [verify-backend, verify-frontend]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     env:
@@ -45,7 +72,7 @@ jobs:
 
       - name: Build image
         run: |
-          docker build -f Dockerfile.web \
+          docker build -f Dockerfile \
             -t docker.io/${{ secrets.REGISTRY_USERNAME }}/quorum:latest .
 
       - name: Push image

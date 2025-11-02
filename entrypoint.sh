@@ -5,8 +5,8 @@ set -e
 
 # Run database migrations
 echo "Running database migrations..."
-flask db upgrade
+alembic upgrade head
 
-# Start the Flask app using Gunicorn, specifying the factory function
+# Start the FastAPI app using Uvicorn
 echo "Starting web server..."
-exec gunicorn 'app:create_app()'
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000

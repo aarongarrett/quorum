@@ -1,464 +1,713 @@
-# Quorum - A Meeting and Voting Application
+# Quorum Voting System
 
-![Unit Tests](https://github.com/aarongarrett/quorum/actions/workflows/unit.yml/badge.svg)
-![E2E Tests](https://github.com/aarongarrett/quorum/actions/workflows/e2e.yml/badge.svg)
-![CI & CD](https://github.com/aarongarrett/quorum/actions/workflows/ci.yml/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/aarongarrett/quorum/badge.svg?branch=main)](https://coveralls.io/github/aarongarrett/quorum?branch=main)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Anonymous, QR-driven voting for meetings with FastAPI backend and React frontend.
 
+## Table of Contents
 
-## 1. Overview
-Quorum is a web-based meeting and voting application built with Flask and PostgreSQL. It provides anonymous, QR-driven in-person voting for meetings. The application has functionality for managing meetings, conducting polls, and tracking participant check-ins, and it is containerized using Docker and follows modern development practices with comprehensive testing.
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Testing](#testing)
+- [Production Deployment](#production-deployment)
+- [Development](#development)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Changelog](#changelog)
 
-## 2. Core Features
+---
 
-### 2.1 Meeting Management
-- Create and manage meetings with specific timeframes
-- Generate unique meeting codes for participant access
-- Track meeting attendance through check-ins
-- Real-time metrics via SSE
+## Overview
 
-### 2.2 Polling System
-- Create multiple polls within a meeting
-- Support for simple voting mechanisms with up to 8 choices per poll
-- Track individual votes while maintaining voter anonymity
+Quorum is a secure, anonymous voting system designed for meetings. Built with modern technologies, it provides real-time voting with QR-code check-ins.
 
-### 2.3 Check-in System
-- QR code or unique meeting text code required for check-in
-- Unique vote tokens for participants
-- Timestamp tracking for attendance
-- Meeting-specific check-in records
+**Key Capabilities:**
 
+**Security:**
+- Argon2-hashed vote tokens (no plaintext storage)
+- JWT-based admin authentication
+- Idempotent check-in prevents duplicate tokens
+- Foreign key architecture ensures data integrity
 
-## 3. Quick Start
+**Architecture:**
+- FastAPI backend (async, modern Python)
+- React SPA frontend (no page reloads)
+- Server-Sent Events for real-time updates
+- Client-side QR code generation
 
-### 3.1 Prerequisites
-- Python 3.10+
-- Docker
-- Chrome browser (for local development with Selenium)
+**User Experience:**
+- Tokens stored in localStorage (persist across refreshes)
+- Real-time vote count updates
+- Automatic reconnection on network issues
+- Comprehensive error handling and loading states
 
+---
 
-### 3.2 Installation
-```
-git clone https://github.com/aarongarrett/quorum.git
+## Quick Start
+
+### Prerequisites
+
+- Docker & Docker Compose
+- Node.js 18+ (for local frontend development)
+- Python 3.11+ (for local backend development)
+
+### Using Docker (Recommended)
+
+```bash
+# Clone the repository
+git clone <your-repo>
 cd quorum
-pip install -r requirements/base.txt
+
+# Copy environment file
+cp .env.example .env
+
+# Start all services
 docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Access the application
+# Frontend: http://localhost:8000
+# Admin: http://localhost:8000/admin
+# API Docs: http://localhost:8000/docs
 ```
 
-### 3.3 First poll in 5 minutes
-1. Visit http://localhost:5000/admin
-2. Log in (use "adminpass" if `QUORUM_ADMIN_PASSWORD` isn't set in the environment)
-3. Create Meeting → copy meeting code
-4. Create Poll
-5. Visit http://localhost:5000
-6. Check in for meeting with meeting code
-7. Vote in the poll
-8. Visit http://localhost:5000/admin to watch live results
+That's it! The database tables are created automatically on first run.
 
+### Local Development Setup
 
-## 4. Technical Details
+**Option 1: PostgreSQL in Docker (Recommended)**
 
-### 4.1 Architecture Overview
-#### Factory Pattern
-  - **create_app(config_name)** → Flask app + config + DB + blueprints
+```bash
+# Start PostgreSQL
+docker run -d \
+  --name quorum-postgres \
+  -e POSTGRES_USER=quorum \
+  -e POSTGRES_PASSWORD=quorum \
+  -e POSTGRES_DB=quorum \
+  -p 5432:5432 \
+  postgres:15-alpine
 
-#### Blueprints
-  - **public_bp**: public UI (home, check-in, vote)
-  - **admin_bp**: admin UI (login, dashboard, CRUD)
-  - **api_bp**: JSON/SSE endpoints
+# Start Redis (for rate limiting)
+docker run -d \
+  --name quorum-redis \
+  -p 6379:6379 \
+  redis:7-alpine
 
-#### Service Layer
-  - **Thin controllers**: all business logic lives in services/
+# Setup backend
+python -m venv .venv
+.venv/Scripts/activate  # Windows
+# source .venv/bin/activate  # macOS/Linux
 
-#### Database
-  - **SQLAlchemy models**: Meeting, Poll, Checkin, PollVote; Cascading deletes, indexed for performance
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload
 
-#### Real-time
-  - **SSE streams**: public (/api/meetings/stream) and admin (/api/admin/meetings/stream)
+# Setup frontend (new terminal)
+cd frontend
+npm install
+npm start
+```
 
-### 4.2 Stack Architecture
+**Frontend:** http://localhost:3000
+**Backend API:** http://localhost:8000
 
-#### Backend
-- **Framework**: Flask (Python)
-- **Database**: PostgreSQL with SQLAlchemy ORM
-- **Migrations**: Flask-Migrate (Alembic)
-- **API**: RESTful endpoints for frontend communication
+---
 
-#### Frontend
-- **Templating**: Jinja2
-- **Static assets**: served through Flask
+## Features
 
-#### Development & Deployment
-- **Containerization**: Docker and Docker Compose
-- **Testing**: Pytest with unit and end-to-end tests
-- **CI/CD**: GitHub Actions for automated testing
-- **Code Quality**: Mypy for type checking, Flake8 for linting
+### Core Functionality
 
-## 5. Configuration
-- **Environment Variables**
-For development, these can be defined in a .env variable in the project root. See .example.env for an example. For production, these would need to be made available to the web container.
-  - `QUORUM_FLASK_ENV`: Environment (development/testing/production)
-  - `QUORUM_FLASK_SECRET`: Session security
-  - `QUORUM_DATABASE_URL`: Database connection string
-  - `QUORUM_ADMIN_PASSWORD`: Admin password
-  - `QUORUM_TIMEZONE`: Timezone
-- **Config classes**: DevelopmentConfig, TestingConfig, ProductionConfig in config.py
+- **Anonymous Voting**: Secure, hash-based vote tokens
+- **QR Code Check-In**: Browser-generated QR codes for easy access
+- **Real-Time Updates**: SSE connections for live vote counts
+- **Admin Dashboard**: Create meetings, manage polls, view results
+- **Idempotent Check-In**: Users can re-check-in safely if token is lost
 
-## 6. Project Structure
+### Technical Features
+
+- **RESTful API**: Versioned endpoints under `/api/v1/`
+- **JWT Authentication**: Stateless admin auth
+- **Rate Limiting**: Prevent abuse (200 req/min default)
+- **CORS Support**: Configurable origins
+- **Health Checks**: `/health` endpoint for monitoring
+- **Database Migrations**: Alembic for schema versioning
+
+---
+
+## Architecture
+
+### Project Structure
 
 ```
 quorum/
-├── app/                        # Main application package
-│   ├── blueprints/             # Flask blueprints for modular organization
-│   │   ├── admin/              # Admin interface routes
-│   │   ├── api/                # API endpoints
-│   │   └── public/             # Public-facing routes
-│   ├── services/               # Business logic
-│   ├── static/                 # Static files (CSS, JS, images)
-│   ├── templates/              # HTML templates
-│   ├── __init__.py             # Application factory
-│   ├── config.py               # Configuration settings
-│   ├── database.py             # Database initialization
-│   ├── models.py               # Database models
-│   └── utils.py                # Utility functions
-├── migrations/                 # Database migration files
-├── tests/                      # Test suite
-│   ├── e2e/                    # End-to-end tests
-│   └── unit/                   # Unit tests
-├── .env                        # Environment variables
-├── docker-compose.stress.yml   # Docker Compose configuration for stress testing
-├── Dockerfile.locust           # Locust stress testing Dockerfile
-├── docker-compose.e2e.yml      # Docker Compose configuration for E2E testing
-├── docker-compose.yml          # Main Docker Compose configuration
-├── Dockerfile.web              # Web application Dockerfile
-├── entrypoint.sh               # Production application entry point
-├── gunicorn.conf.py            # Configuration for gunicorn
-├── locustfile.py               # Configuration for Locust (stress testing)
-├── noxfile.py                  # Test configuration
-├── requirements/               # Python dependencies
-├── run.py                      # Development application entry point
-└── setup.cfg                   # Linter configuration
+├── app/                      # Backend application
+│   ├── main.py              # FastAPI app initialization
+│   ├── api/                 # API layer
+│   │   ├── deps.py          # Shared dependencies
+│   │   └── v1/endpoints/    # Route handlers
+│   ├── core/                # Configuration & security
+│   ├── db/models/           # SQLAlchemy models
+│   ├── schemas/             # Pydantic validation
+│   └── services/            # Business logic
+├── frontend/                # React SPA
+│   └── src/
+│       ├── App.jsx          # Main component
+│       ├── api.js           # API client
+│       └── components/      # React components
+├── tests/                   # Test suite
+│   ├── unit/               # Unit tests
+│   └── integration/        # API integration tests
+├── alembic/                # Database migrations
+├── docker-compose.yml      # Development setup
+├── docker-compose.production.yml  # Production setup
+└── Dockerfile              # Multi-stage build
 ```
 
-## 7. API Reference
+### Tech Stack
 
-All JSON & SSE endpoints live under `/api/*`. You can explore them interactively via Swagger UI at `GET /api/docs`, or grab the raw OpenAPI spec at `/api/swagger.json`.
+**Backend:**
+- FastAPI (async Python web framework)
+- SQLAlchemy (ORM)
+- PostgreSQL (database)
+- Redis (rate limiting)
+- Alembic (migrations)
+- Argon2 (password hashing)
+- PyJWT (authentication)
 
+**Frontend:**
+- React 18
+- React Router 6
+- Vite (build tool)
+- qrcode.react (QR generation)
 
-### 7.1 Admin Authentication
+**Testing:**
+- pytest (backend, 45 tests, 82% coverage)
+- Jest + React Testing Library (frontend, 91% coverage)
 
-```http
-POST /api/login
-Content-Type: application/json
+---
 
-{
-  "password": "your-admin-password"
-}
-````
+## Installation
 
-**Responses**
+### Docker Compose (Full Stack)
 
-* **200 OK**
-
-  ```json
-  { "success": true }
-  ```
-* **400 Bad Request**
-
-  ```json
-  { "message": "Password is required" }
-  ```
-* **400 Bad Request**
-
-  ```json
-  { "message": "Invalid password" }
-  ```
-
-
-### 7.2 Create Meeting (Admin Only)
-
-```http
-POST /api/admin/meetings
-Content-Type: application/json
-Cookie: session=…
-
-{
-  "start_time": "2025-06-20T15:00:00",
-  "end_time":   "2025-06-20T17:00:00"
-}
-```
-
-**Responses**
-
-* **201 Created**
-
-  ```json
-  {
-    "meeting_id": 42,
-    "meeting_code": "ABCD1234"
-  }
-  ```
-* **403 Forbidden**
-
-  ```json
-  { "message": "Unauthorized" }
-  ```
-* **500 Internal Server Error**
-
-  ```json
-  { "message": "Detailed error message" }
-  ```
-
-
-### 7.3 Create Poll (Admin Only)
-
-```http
-POST /api/admin/meetings/{meeting_id}/polls
-Content-Type: application/json
-Cookie: session=…
-
-{
-  "name": "Best Flavor"
-}
-```
-
-**Responses**
-
-* **201 Created**
-
-  ```json
-  { "poll_id": 7 }
-  ```
-* **403 Forbidden**
-
-  ```json
-  { "message": "Unauthorized" }
-  ```
-* **400 Bad Request**
-
-  ```json
-  { "message": "Name must not be empty" }
-  ```
-* **500 Internal Server Error**
-
-  ```json
-  { "message": "Detailed error message" }
-  ```
-
-
-### 7.4 List & Filter Meetings
-
-#### GET meetings (public)
-
-```http
-GET /api/meetings
-```
-
-Uses cookies & session tokens to filter which meetings you’ve checked in to.
-
-#### POST meetings (API-only)
-
-```http
-POST /api/meetings
-Content-Type: application/json
-
-{
-  "42": "token-for-meeting-42",
-  "99": "token-for-meeting-99"
-}
-```
-
-**Response** `200 OK`
-
-```json
-[
-  {
-    "id": 42,
-    "meeting_code": "ABCD1234",
-    "start_time": "2025-06-20T15:00:00Z",
-    "end_time": "2025-06-20T17:00:00Z",
-    "checked_in": true,
-    "polls": [ … ]
-  },
-  …
-]
-```
-
-
-### 7.5 Check‐In
-
-```http
-POST /api/meetings/{meeting_id}/checkins
-Content-Type: application/json
-
-{ "meeting_code": "ABCD1234" }
-```
-
-**Responses**
-
-* **200 OK**
-
-  ```json
-  { "token": "vote-token-xyz" }
-  ```
-* **400 Bad Request**
-
-  ```json
-  { "message": "Meeting code must not be empty" }
-  ```
-* **404 Not Found**
-
-  ```json
-  { "message": "Invalid meeting code" }
-  ```
-* **500 Internal Server Error**
-
-
-### 7.6 Vote
-
-```http
-POST /api/meetings/{meeting_id}/polls/{poll_id}/votes
-Content-Type: application/json
-
-{
-  "token": "vote-token-xyz",
-  "vote":  "A"
-}
-```
-
-**Responses**
-
-* **200 OK**
-
-  ```json
-  { "success": true }
-  ```
-* **400 Bad Request**
-
-  ```json
-  { "message": "Token must not be empty" }
-  ```
-* **404 Not Found**
-
-  ```json
-  { "message": "You have already voted" }
-  ```
-* **500 Internal Server Error**
-
-
-### 7.7 Server-Sent Events (SSE)
-
-#### Public Stream
-
-```http
-GET /api/meetings/stream
-Accept: text/event-stream
-```
-
-Yields an updated list of available meetings every 5 seconds.
-
-#### Admin Metrics Stream
-
-```http
-GET /api/admin/meetings/stream
-Accept: text/event-stream
-Cookie: session=…  # must be admin
-```
-
-Yields real-time check-in counts and vote tallies every 3 seconds.
-
-
-
-
-
-## 8. Route Reference
-
-| Endpoint                   | Methods       | Rule                                                         |
-|----------------------------|---------------|--------------------------------------------------------------|
-| `admin.admin_redirect`     | `GET`         | `/admin/`                                                    |
-| `admin.dashboard_ui`       | `GET`         | `/admin/dashboard`                                           |
-| `admin.generate_qr`        | `GET`         | `/admin/meetings/<int:meeting_id>/qr.<fmt>`                  |
-| `admin.login_ui`           | `GET, POST`   | `/admin/login`                                               |
-| `admin.logout_ui`          | `POST`        | `/admin/logout`                                              |
-| `admin.meeting_create_ui`  | `GET, POST`   | `/admin/meetings`                                            |
-| `admin.meeting_delete_ui`  | `DELETE, POST`| `/admin/meetings/<int:meeting_id>`                           |
-| `admin.poll_create_ui`     | `GET, POST`   | `/admin/meetings/<int:meeting_id>/polls`                     |
-| `admin.poll_delete_ui`     | `DELETE, POST`| `/admin/meetings/<int:meeting_id>/polls/<int:poll_id>`       |
-| `api.api_admin_login`      | `POST`        | `/api/login`                                                 |
-| `api.api_admin_stream`     | `GET`         | `/api/admin/meetings/stream`                                 |
-| `api.api_checkin_api`      | `POST`        | `/api/meetings/<int:meeting_id>/checkins`                    |
-| `api.api_create_meeting`   | `POST`        | `/api/admin/meetings`                                        |
-| `api.api_create_poll`      | `POST`        | `/api/admin/meetings/<int:meeting_id>/polls`                 |
-| `api.api_meetings`         | `GET, POST`   | `/api/meetings`                                              |
-| `api.api_user_stream`      | `GET`         | `/api/meetings/stream`                                       |
-| `api.api_vote_api`         | `POST`        | `/api/meetings/<int:meeting_id>/polls/<int:poll_id>/votes`   |
-| `api.doc`                  | `GET`         | `/api/docs`                                                  |
-| `api.root`                 | `GET`         | `/api/`                                                      |
-| `api.specs`                | `GET`         | `/api/swagger.json`                                          |
-| `public.auto_checkin`      | `GET`         | `/meetings/<int:meeting_id>/auto_checkin`                    |
-| `public.checkin_ui`        | `GET, POST`   | `/meetings/<int:meeting_id>/checkins`                        |
-| `public.home_ui`           | `GET`         | `/`                                                          |
-| `public.vote_ui`           | `GET, POST`   | `/meetings/<int:meeting_id>/polls/<int:poll_id>/votes`       |
-| `restx_doc.static`         | `GET`         | `/swaggerui/<path:filename>`                                 |
-| `static`                   | `GET`         | `/static/<path:filename>`                                    |
-
-
-## 9. Development Workflow
-
-### 9.1 Prerequisites
-- Docker and Docker Compose
-- Python 3.10+
-- Chrome browser (for local Selenium testing)
-
-### 9.2 Getting Started
-1. Clone the repository
-2. Copy `.example.env` to `.env` and configure environment variables
-3. Start the development environment: `docker-compose up -d`
-4. Run database migrations: `docker-compose exec web flask db upgrade`
-5. Access the application at http://localhost:5000
-
-### 9.3 Testing
-#### Overview
-- **Lint**: isort + black + mypy + flake8
-- **Unit tests**: pytest + testcontainers
-- **End-to-end tests**: pytest + Selenium
-
-#### Instructions
-Run the full test suite using Nox:
 ```bash
-nox
+# Start all services
+docker-compose up -d
+
+# The stack includes:
+# - PostgreSQL database
+# - Redis cache
+# - FastAPI + React app
 ```
 
-Or run specific test types:
+### Manual Installation
+
+**Backend:**
+
 ```bash
-nox -s lint    # Run linter
-nox -s unit    # Run unit tests
-nox -s e2e     # Run end-to-end tests
+# Create virtual environment
+python -m venv .venv
+.venv/Scripts/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations
+alembic upgrade head
+
+# Generate secure keys
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Configure .env file
+cp .env.example .env
+# Edit .env with your settings
+
+# Start server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 9.4 Development Server
-1. Configure development environment variables in `.env`
-2. Build and start containers: `docker-compose up -d --build`
-3. Database migrations are carried out automatically in entrypoint.sh
+**Frontend:**
 
-## 10. Deployment
-1. Create the Postgres database and note its URL
-2. Configure production environment variables (particularly QUORUM_DATABASE_URL)
-3. Build the web container: `docker build -f Dockerfile.web .`
-4. Database migrations are carried out automatically in entrypoint.sh
+```bash
+cd frontend
 
+# Install dependencies
+npm install
 
-## 11. Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add/update tests as needed
-5. Run the test suite
-6. Submit a pull request
+# Development server (proxies to localhost:8000)
+npm start
 
-## 12. License
-MIT License
+# Production build
+npm run build
+```
 
-## 13. Contact
-Aaron Garrett [<aaron.lee.garrett@gmail.com>]
+---
+
+## Testing
+
+### Backend Tests
+
+```bash
+# Activate virtual environment
+.venv/Scripts/activate
+
+# Run all tests
+pytest
+
+# With coverage report
+pytest --cov=app
+
+# Run specific test types
+pytest -m unit          # Unit tests only
+pytest -m integration   # Integration tests only
+
+# View HTML coverage report
+# Opens: test-reports/backend/coverage-html/index.html
+# Opens: test-reports/backend/test-report.html
+```
+
+**Test Structure:**
+- Uses in-memory SQLite (no PostgreSQL needed)
+
+### Frontend Tests
+
+```bash
+cd frontend
+
+# Run tests
+npm test
+
+# Run once (CI mode)
+npm test -- --watchAll=false
+
+# With coverage
+npm test -- --coverage --watchAll=false
+
+# View reports
+# Opens: test-reports/frontend/coverage/index.html
+# Opens: test-reports/frontend/test-report/index.html
+```
+
+**Test Structure:**
+- Uses Jest + React Testing Library
+- MSW for API mocking
+
+### Test Reports
+
+All test artifacts are centralized in:
+
+```
+test-reports/
+├── backend/
+│   ├── test-report.html        # Test results
+│   ├── coverage-html/          # Code coverage
+│   ├── coverage.xml            # CI/CD format
+│   └── coverage.json
+└── frontend/
+    ├── test-report/index.html  # Test results
+    └── coverage/               # Code coverage
+```
+
+### Comprehensive Test Script
+
+A comprehensive script (`run_all_tests.py`) sets up the environment and runs all tests. You can find information about it in `TEST_RUNNER_README.md`.
+
+---
+
+## Production Deployment
+
+### Environment Variables
+
+**Required:**
+
+```bash
+ENVIRONMENT=production
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+SECRET_KEY=<generate-with-secrets.token_urlsafe(32)>
+ADMIN_PASSWORD=<your-secure-password>
+CORS_ORIGINS=https://yourdomain.com
+```
+
+**Optional:**
+
+```bash
+REDIS_URL=redis://redis:6379  # For distributed rate limiting
+TIMEZONE=America/New_York
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+APP_TITLE=Quorum Voting System
+```
+
+### Quick Deploy with Docker
+
+```bash
+# Generate secure secret
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Build image
+docker build -t quorum:latest .
+
+# Run container
+docker run -d \
+  -p 8000:8000 \
+  -e ENVIRONMENT=production \
+  -e DATABASE_URL="postgresql://user:pass@host:5432/dbname" \
+  -e SECRET_KEY="<your-generated-key>" \
+  -e ADMIN_PASSWORD="<your-password>" \
+  -e CORS_ORIGINS="https://yourdomain.com" \
+  --name quorum \
+  quorum:latest
+```
+
+### Using Docker Compose
+
+```bash
+# Use production compose file
+docker-compose -f docker-compose.production.yml up -d
+
+# Run migrations
+docker-compose -f docker-compose.production.yml exec quorum alembic upgrade head
+
+# View logs
+docker-compose -f docker-compose.production.yml logs -f
+```
+
+### Platform-Specific Deployment
+
+**Render:**
+1. Create Web Service from GitHub repo
+2. Add PostgreSQL database
+3. Set environment variables in dashboard
+4. Deploy automatically
+
+**Railway:**
+1. Create project from GitHub
+2. Add PostgreSQL service
+3. Set environment variables
+4. Auto-deploys from Dockerfile
+
+**Heroku:**
+```bash
+heroku create your-app
+heroku addons:create heroku-postgresql:mini
+heroku config:set ENVIRONMENT=production
+heroku config:set SECRET_KEY="<key>"
+heroku config:set ADMIN_PASSWORD="<password>"
+git push heroku main
+heroku run alembic upgrade head
+```
+
+### Reverse Proxy (Nginx)
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # SSE-specific configuration
+    location /api/v1/sse/ {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Connection '';
+        proxy_http_version 1.1;
+        chunked_transfer_encoding off;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400;
+    }
+}
+```
+
+---
+
+## Development
+
+### Daily Workflow
+
+**Start Services:**
+```bash
+# Terminal 1: Database
+docker start quorum-postgres quorum-redis
+
+# Terminal 2: Backend
+.venv/Scripts/activate
+uvicorn app.main:app --reload
+
+# Terminal 3: Frontend
+cd frontend
+npm start
+```
+
+**Access Points:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- Admin: http://localhost:3000/admin/login
+
+### Database Migrations
+
+```bash
+# Create migration
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback one migration
+alembic downgrade -1
+
+# View current version
+alembic current
+```
+
+### Common Commands
+
+```bash
+# Backend
+pytest                         # Run tests
+pytest --cov=app              # With coverage
+uvicorn app.main:app --reload # Dev server
+
+# Frontend
+npm start                     # Dev server
+npm test                      # Run tests
+npm run build                 # Production build
+
+# Docker
+docker-compose up -d          # Start all services
+docker-compose down           # Stop all services
+docker-compose logs -f api    # View backend logs
+docker-compose restart        # Restart services
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file based on `.env.example`:
+
+```bash
+# Environment
+ENVIRONMENT=development
+
+# Database (choose one method)
+DATABASE_URL=postgresql://quorum:quorum@localhost:5432/quorum
+
+# OR individual components
+# POSTGRES_USER=quorum
+# POSTGRES_PASSWORD=quorum
+# POSTGRES_HOST=localhost
+# POSTGRES_PORT=5432
+# POSTGRES_DB=quorum
+
+# Redis (optional, uses in-memory if not set)
+REDIS_URL=redis://localhost:6379
+
+# Security
+SECRET_KEY=dev-secret-key-change-in-production
+ADMIN_PASSWORD=adminpass
+
+# CORS
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+
+# Application
+TIMEZONE=America/New_York
+APP_TITLE=Quorum Voting System
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+```
+
+### Customization
+
+**Vote Options:**
+
+Currently set to A-H (8 options). To change:
+
+```python
+# Backend: app/schemas/vote.py
+vote: str = Field(..., pattern="^[A-J]$")  # A through J
+
+# Frontend: frontend/src/components/VoteModal.jsx
+const VOTE_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+```
+
+**SSE Update Intervals:**
+
+```python
+# app/core/constants.py
+SSE_USER_INTERVAL = 5    # seconds
+SSE_ADMIN_INTERVAL = 3   # seconds
+```
+
+**Rate Limits:**
+
+```python
+# app/core/rate_limit.py
+RATE_LIMITS = {
+    "check_in": "200/minute",
+    "vote": "200/minute",
+    "available_meetings": "200/minute",
+    "admin_read": "200/minute",
+    "admin_write": "200/minute",
+}
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**"Can't check in" / "Invalid token"**
+- Check browser console for errors
+- Verify token exists: `localStorage.getItem('meeting_X_token')`
+- Try re-checking in (idempotent - returns same token)
+- Clear localStorage and check in fresh
+
+**SSE connection fails**
+- Check browser console for SSE errors
+- Test endpoint: `curl http://localhost:8000/api/v1/sse/meetings?tokens=%7B%7D`
+- Ensure reverse proxy doesn't buffer SSE (see nginx config)
+- SSE auto-reconnects after 3 seconds on disconnect
+
+**Database connection error**
+- Check PostgreSQL is running: `docker ps | grep postgres`
+- Verify DATABASE_URL is correct
+- Test connection: `psql "postgresql://user:pass@host:5432/db"`
+
+**Port already in use**
+```bash
+# Find process
+netstat -ano | findstr :8000  # Windows
+lsof -i :8000                 # macOS/Linux
+
+# Kill process
+taskkill /PID <PID> /F        # Windows
+kill -9 <PID>                 # macOS/Linux
+```
+
+**Frontend build errors**
+```bash
+# Clean install
+cd frontend
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**Backend module errors**
+```bash
+# Recreate virtual environment
+deactivate
+rm -rf .venv
+python -m venv .venv
+.venv/Scripts/activate
+pip install -r requirements.txt
+```
+
+### Debug Mode
+
+**Backend:**
+```bash
+# Enable detailed logging
+export LOG_LEVEL=DEBUG
+uvicorn app.main:app --reload --log-level debug
+```
+
+**Frontend:**
+```bash
+# Enable React debug mode
+REACT_APP_DEBUG=true npm start
+```
+
+---
+
+## API Documentation
+
+FastAPI provides interactive API documentation:
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+### Key Endpoints
+
+**Public Endpoints:**
+- `POST /api/v1/meetings/available` - Get available meetings
+- `POST /api/v1/meetings/{id}/checkins` - Check in to meeting
+- `POST /api/v1/meetings/{id}/polls/{poll_id}/votes` - Cast vote
+- `GET /api/v1/sse/meetings` - SSE stream for updates
+
+**Admin Endpoints:**
+- `POST /api/v1/auth/admin/login` - Admin login
+- `POST /api/v1/meetings` - Create meeting
+- `POST /api/v1/meetings/{id}/polls` - Create poll
+- `GET /api/v1/admin/meetings` - Get all meetings
+- `DELETE /api/v1/admin/meetings/{id}` - Delete meeting
+- `GET /api/v1/sse/admin/meetings` - SSE stream for admin
+
+---
+
+## Changelog
+
+### Initial Release (2025)
+
+**Features:**
+- FastAPI backend with async capabilities
+- Pure React SPA frontend
+- Argon2-hashed vote tokens for security
+- JWT-based admin authentication
+- Server-Sent Events for real-time updates
+- Client-side QR code generation
+- Foreign key architecture (no duplicate token storage)
+
+**Security Improvements:**
+- Vote tokens stored as Argon2 hashes
+- Idempotent check-in prevents "lost token" bug
+- JWT authentication replaces session cookies
+- Rate limiting on all endpoints
+
+**Performance:**
+- Async Python with FastAPI
+- Bulk database queries
+- SSE connections with auto-reconnect
+- Client-side QR generation (zero server load)
+
+**Bug Fixes:**
+- Fixed "already checked in but can't vote" issue
+- Tokens persist across refreshes (localStorage)
+- Users can safely re-check-in with existing token
+
+**Breaking Changes:**
+- Database schema incompatible with v1.0
+- API endpoints completely redesigned
+- Authentication changed from sessions to JWT
+- Requires migration for existing deployments
+
+---
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Support
+
+- **API Documentation**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
+- **GitHub Issues**: <your-repo>/issues
+
+---
+
+**Version**: 2.0.0
+**Last Updated**: 2025

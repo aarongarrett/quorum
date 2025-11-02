@@ -4,56 +4,41 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
 env/
 venv/
-ENV/
+.venv
+.venv-test
 *.egg-info/
-*.egg
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-
-# Testing
-.tox/
-coverage/
-htmlcov/
-.nox/
-.coverage
-.coverage.*
-.coverage.xml
-.cache
-nosetests.xml
-junit.xml
-pytest/
-*.py,cover
-workflow_local.bat
-
-# Debug
-*.png
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+dist/
+build/
 
 # Environment
 .env
-.env.*
-.bat
+.env.local
+.env.production
+.env.development
 
-# Logs
-*.log
-logs/
-
-# Documentation
-_docs/build/
+# Database
 *.db
+*.sqlite3
+
+# Testing & Coverage
+test-reports/
+.coverage
+htmlcov/
+.pytest_cache/
+coverage/
+test-report/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic
+alembic/versions/*.pyc

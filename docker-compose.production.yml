@@ -1,0 +1,77 @@
+name: quorum-prod
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # Environment
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+
+      # Database Configuration
+      # Option 1: Use DATABASE_URL if provided
+      - DATABASE_URL=${DATABASE_URL}
+
+      # Option 2: Use individual PostgreSQL components if DATABASE_URL not provided
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB}
+
+      # Security (REQUIRED)
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ALGORITHM=${ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+
+      # CORS Configuration
+      - CORS_ORIGINS=${CORS_ORIGINS}
+
+      # Application Configuration
+      - APP_TITLE=${APP_TITLE:-Quorum Voting System}
+      - APP_DESCRIPTION=${APP_DESCRIPTION:-Anonymous QR-driven voting for meetings}
+      - APP_VERSION=${APP_VERSION:-2.0.0}
+      - TIMEZONE=${TIMEZONE:-America/New_York}
+      - FRONTEND_BUILD_PATH=${FRONTEND_BUILD_PATH:-./frontend/build}
+
+      # Redis Configuration
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -13,7 +13,3 @@ class VoteRequest(BaseModel):
     def validate_token_field(cls, v: str) -> str:
         """Validate token format."""
         return validate_token_format(v)
-
-
-class VoteResponse(BaseModel):
-    success: bool = True

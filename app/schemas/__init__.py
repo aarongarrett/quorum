@@ -9,7 +9,8 @@ from app.schemas.meeting import (
 )
 from app.schemas.poll import PollCreate, PollResponse, PollDetail, PollWithVote
 from app.schemas.checkin import CheckinRequest, CheckinResponse
-from app.schemas.vote import VoteRequest, VoteResponse
+from app.schemas.vote import VoteRequest
+from app.schemas.common import SuccessResponse, ErrorResponse, ErrorDetail
 
 __all__ = [
     "AdminLoginRequest",
@@ -26,5 +27,7 @@ __all__ = [
     "CheckinRequest",
     "CheckinResponse",
     "VoteRequest",
-    "VoteResponse",
+    "SuccessResponse",
+    "ErrorResponse",
+    "ErrorDetail",
 ]

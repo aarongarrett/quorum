@@ -77,11 +77,6 @@ async def sse_meetings(request: Request, tokens: str = ""):
         - TIER 1: Shared base meeting data (3-second TTL, cached globally)
         - TIER 2: User-specific check-in/vote data (not cached, fast indexed queries)
 
-    Performance impact with 150 concurrent users:
-        - Before: 1,800 heavy queries/min
-        - After: 20 heavy + 300 light queries/min
-        - 82% reduction in database load
-
     The client should reconnect automatically if disconnected.
     """
     # Parse token map
@@ -121,11 +116,6 @@ async def sse_admin_meetings(request: Request, admin: dict = Depends(verify_admi
         - Cache key: "admin_all_meetings"
         - Shared globally (though typically only 1 admin connection)
         - Maintains consistency with user endpoint caching
-
-    Performance impact:
-        - Before: 20 queries/min (polling every 3 seconds)
-        - After: ~1 query every 3 seconds (cache refresh)
-        - Minimal impact but maintains consistency
 
     The client should reconnect automatically if disconnected.
     """

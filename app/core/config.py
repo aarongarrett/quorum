@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # Application
     APP_TITLE: str = "Quorum Voting System"
     APP_DESCRIPTION: str = "Anonymous QR-driven voting for meetings"
-    APP_VERSION: str = "2.0.0"
+    APP_VERSION: str = "1.0.0"
 
     # Frontend
     FRONTEND_BUILD_PATH: str = "./frontend/build"
@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # Server-Sent Events (SSE) Configuration
     SSE_USER_INTERVAL: int = 5  # User-facing meeting list updates every 5 seconds
     SSE_ADMIN_INTERVAL: int = 3  # Admin dashboard updates every 3 seconds (faster for real-time monitoring)
+
+    # Database Connection Pool Configuration
+    DB_POOL_SIZE: int = 15  # Steady-state connection pool size (200 users polling every 5s)
+    DB_MAX_OVERFLOW: int = 25  # Additional connections for spikes (total max: pool_size + max_overflow)
 
     def get_database_url(self) -> str:
         """

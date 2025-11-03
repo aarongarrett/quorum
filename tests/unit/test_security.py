@@ -107,3 +107,41 @@ class TestAdminAuth:
         config.settings = config.Settings()
 
         assert verify_admin_password("wrongpassword") is False
+
+    def test_verify_admin_password_dual_mode_detection(self, monkeypatch):
+        """Test that password verification correctly detects and handles both modes."""
+        from app.core.security import get_password_hash
+
+        # Test Mode 1: Plaintext password (no $argon2 prefix)
+        monkeypatch.setenv("ADMIN_PASSWORD", "plaintext_password")
+        from app.core import config
+        config.settings = config.Settings()
+
+        # Should use plaintext comparison
+        assert verify_admin_password("plaintext_password") is True
+        assert verify_admin_password("wrong") is False
+
+        # Test Mode 2: Hashed password (with $argon2 prefix)
+        hashed = get_password_hash("secure_password")
+        assert hashed.startswith("$argon2"), "Hashed password should start with $argon2"
+
+        monkeypatch.setenv("ADMIN_PASSWORD", hashed)
+        config.settings = config.Settings()
+
+        # Should use Argon2 verification
+        assert verify_admin_password("secure_password") is True
+        assert verify_admin_password("wrong") is False
+
+    def test_verify_admin_password_plaintext_not_treated_as_hash(self, monkeypatch):
+        """Test that plaintext passwords without $argon2 prefix aren't treated as hashes."""
+        # Set a password that doesn't start with $argon2
+        monkeypatch.setenv("ADMIN_PASSWORD", "simple_pass_123")
+
+        from app.core import config
+        config.settings = config.Settings()
+
+        # Should use direct comparison, not Argon2 verification
+        # The exact string must match for plaintext
+        assert verify_admin_password("simple_pass_123") is True
+        assert verify_admin_password("simple_pass_12") is False
+        assert verify_admin_password("simple_pass_1234") is False

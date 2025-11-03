@@ -12,8 +12,8 @@ engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     echo=False,
-    pool_size=15,        # Steady-state SSE load (200 users polling every 5s)
-    max_overflow=25      # Handle vote spikes + variance (total max: 40 connections)
+    pool_size=settings.DB_POOL_SIZE,        # Configurable via DB_POOL_SIZE env var
+    max_overflow=settings.DB_MAX_OVERFLOW    # Configurable via DB_MAX_OVERFLOW env var
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, verify_admin_token, TIMEZONE
-from app.schemas import AdminMeetingDetail
+from app.schemas import AdminMeetingDetail, SuccessResponse
 from app.services.meeting import get_all_meetings, delete_meeting
 from app.services.poll import delete_poll
 from app.core.cache import global_cache
@@ -28,11 +28,11 @@ async def get_all_meetings_endpoint(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/meetings/{meeting_id}")
+@router.delete("/meetings/{meeting_id}", response_model=SuccessResponse)
 async def delete_meeting_endpoint(
     meeting_id: int,
     db: Session = Depends(get_db)
-):
+) -> SuccessResponse:
     """
     Delete a meeting (admin only).
 
@@ -49,15 +49,15 @@ async def delete_meeting_endpoint(
     global_cache.invalidate("base_meetings")
     global_cache.invalidate("admin_all_meetings")
 
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
-@router.delete("/meetings/{meeting_id}/polls/{poll_id}")
+@router.delete("/meetings/{meeting_id}/polls/{poll_id}", response_model=SuccessResponse)
 async def delete_poll_endpoint(
     meeting_id: int,
     poll_id: int,
     db: Session = Depends(get_db)
-):
+) -> SuccessResponse:
     """
     Delete a poll (admin only).
 
@@ -73,7 +73,7 @@ async def delete_poll_endpoint(
         global_cache.invalidate("base_meetings")
         global_cache.invalidate("admin_all_meetings")
 
-        return {"success": True}
+        return SuccessResponse(success=True)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

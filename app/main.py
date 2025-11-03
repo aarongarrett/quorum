@@ -43,6 +43,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Add logging middleware (must be added before other middleware for proper request tracking)
 app.add_middleware(LoggingMiddleware)
 
+# Add API versioning middleware
+@app.middleware("http")
+async def add_api_version_header(request: Request, call_next):
+    """Add X-API-Version header to all responses for version tracking."""
+    response = await call_next(request)
+    response.headers["X-API-Version"] = settings.APP_VERSION
+    return response
+
 # CORS middleware - configured for cookie-based auth
 app.add_middleware(
     CORSMiddleware,

@@ -325,6 +325,44 @@ A comprehensive script (`run_all_tests.py`) sets up the environment and runs all
 
 ## Production Deployment
 
+### Pre-Deployment Security Checklist
+
+**CRITICAL**: Complete this checklist before deploying to production:
+
+- [ ] **Change SECRET_KEY** - Generate cryptographically secure key:
+  ```bash
+  python -c "import secrets; print(secrets.token_urlsafe(32))"
+  ```
+- [ ] **Change ADMIN_PASSWORD** - Use strong password (minimum 12 characters) or hash it:
+  ```bash
+  python -c "from app.core.security import get_password_hash; print(get_password_hash('your-secure-password'))"
+  ```
+- [ ] **Set CORS_ORIGINS** - Specify exact domain(s), NOT `["*"]`:
+  ```bash
+  CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+  ```
+- [ ] **Set ENVIRONMENT=production** - Enables security features (HTTPS-only cookies, etc.)
+- [ ] **Enable HTTPS/TLS** - Required for secure cookies and data transmission
+- [ ] **Configure Redis** - Required for distributed rate limiting in multi-instance deployments:
+  ```bash
+  REDIS_URL=redis://your-redis-host:6379
+  ```
+- [ ] **Verify rate limiting works** - Test with: `curl -I http://your-domain.com/health`
+- [ ] **Review and rotate secrets** - Ensure no development keys in production
+- [ ] **Run dependency security audit**:
+  ```bash
+  # Backend
+  pip install pip-audit
+  pip-audit
+
+  # Frontend
+  cd frontend && npm audit
+  ```
+- [ ] **Enable database backups** - Configure automated backups for PostgreSQL
+- [ ] **Set up monitoring and alerting** - Monitor `/health` endpoint and error rates
+- [ ] **Test admin login** - Verify authentication works with new credentials
+- [ ] **Verify `.env` not in git** - Ensure `.env` is in `.gitignore` and not committed
+
 ### Environment Variables
 
 **Required:**
@@ -502,38 +540,129 @@ docker-compose restart        # Restart services
 
 ## Configuration
 
-### Environment Variables
+### Environment Variables Reference
 
-Create a `.env` file based on `.env.example`:
+Create a `.env` file based on `.env.example`. All environment variables with their defaults, implications, and security considerations:
 
+#### Core Application Settings
+
+| Variable | Default | Description | Performance Impact | Security Notes |
+|----------|---------|-------------|-------------------|----------------|
+| `ENVIRONMENT` | `development` | Application environment (`development` or `production`) | None | In production: enables HTTPS-only cookies, stricter validation |
+| `APP_TITLE` | `Quorum Voting System` | Application title displayed in API docs | None | Display only, no security impact |
+| `TIMEZONE` | `UTC` | Timezone for determining "current" meetings | None | Affects which meetings show as "available" |
+
+#### Database Configuration
+
+**Method 1: Connection URL (Recommended)**
+
+| Variable | Example | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql://user:pass@host:5432/db` | Full PostgreSQL connection string |
+
+**Method 2: Individual Components**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_USER` | `quorum` | Database username |
+| `POSTGRES_PASSWORD` | `quorum` | Database password |
+| `POSTGRES_HOST` | `localhost` | Database host |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `POSTGRES_DB` | `quorum` | Database name |
+
+**Performance Tuning:**
+- Connection pooling configured in `app/db/session.py`
+- Default: `pool_size=15`, `max_overflow=25` (40 total connections)
+- Adjust via code if needed for your workload
+
+#### Security Settings
+
+| Variable | Default | Description | Security Level | Notes |
+|----------|---------|-------------|----------------|-------|
+| `SECRET_KEY` | `dev-secret...` | JWT signing key | **CRITICAL** | Must be cryptographically random in production (32+ bytes) |
+| `ADMIN_PASSWORD` | `adminpass` | Admin authentication password | **CRITICAL** | Can be plaintext or Argon2 hash (hash recommended) |
+| `CORS_ORIGINS` | `["*"]` in dev | Allowed origins for CORS | **HIGH** | Must be specific domains in production, never `["*"]` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `480` (8 hours) | JWT token lifetime | Medium | Shorter = more secure, longer = better UX |
+
+**Security Recommendations:**
+- **SECRET_KEY**: Generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+- **ADMIN_PASSWORD**: Hash with `python -c "from app.core.security import get_password_hash; print(get_password_hash('password'))"`
+- **CORS_ORIGINS**: Set to exact domains: `https://yourdomain.com,https://www.yourdomain.com`
+
+#### Rate Limiting & Caching
+
+| Variable | Default | Description | Performance Impact | Scale Considerations |
+|----------|---------|-------------|-------------------|---------------------|
+| `REDIS_URL` | None (in-memory) | Redis connection for distributed rate limiting | Low | Required for multi-instance deployments |
+
+**Without Redis:**
+- Rate limiting works but is per-instance (not shared)
+- Cache is in-memory (not shared across instances)
+- Single-instance deployments work fine
+
+**With Redis:**
+- Rate limiting shared across all instances
+- Better for load-balanced production deployments
+- Example: `redis://redis-host:6379`
+
+#### SSE & Real-Time Updates
+
+Configured in `app/core/constants.py` (requires code change):
+
+| Setting | Default | Description | Performance Impact |
+|---------|---------|-------------|-------------------|
+| `SSE_USER_INTERVAL` | `5` seconds | Update frequency for user SSE | Lower = more real-time, higher DB load |
+| `SSE_ADMIN_INTERVAL` | `3` seconds | Update frequency for admin SSE | Lower = more real-time, higher DB load |
+
+**Performance Trade-offs:**
+- User interval: 5s = 200 users = ~40 queries/sec
+- Admin interval: 3s = faster updates for admins watching votes
+- Adjust based on concurrent user load and database capacity
+
+#### Rate Limit Configuration
+
+Configured in `app/core/rate_limit.py` (requires code change):
+
+```python
+RATE_LIMITS = {
+    "check_in": "200/minute",           # Check-in endpoint
+    "vote": "200/minute",               # Voting endpoint
+    "available_meetings": "200/minute", # Meeting list
+    "admin_read": "200/minute",         # Admin read operations
+    "admin_write": "200/minute",        # Admin write operations
+}
+```
+
+**When to Adjust:**
+- Increase if legitimate users hit limits
+- Decrease if seeing abuse or DDoS attempts
+- Monitor `/health` endpoint for rate limit stats
+
+### Example Configurations
+
+**Development (`.env`):**
 ```bash
-# Environment
 ENVIRONMENT=development
-
-# Database (choose one method)
 DATABASE_URL=postgresql://quorum:quorum@localhost:5432/quorum
-
-# OR individual components
-# POSTGRES_USER=quorum
-# POSTGRES_PASSWORD=quorum
-# POSTGRES_HOST=localhost
-# POSTGRES_PORT=5432
-# POSTGRES_DB=quorum
-
-# Redis (optional, uses in-memory if not set)
 REDIS_URL=redis://localhost:6379
-
-# Security
 SECRET_KEY=dev-secret-key-change-in-production
 ADMIN_PASSWORD=adminpass
-
-# CORS
 CORS_ORIGINS=http://localhost:3000,http://localhost:8000
-
-# Application
 TIMEZONE=America/New_York
-APP_TITLE=Quorum Voting System
 ACCESS_TOKEN_EXPIRE_MINUTES=480
+```
+
+**Production (`.env`):**
+```bash
+ENVIRONMENT=production
+DATABASE_URL=postgresql://prod_user:$ecureP@ss@db.example.com:5432/quorum_prod
+REDIS_URL=redis://redis.example.com:6379
+SECRET_KEY=<32-byte-random-string-from-secrets.token_urlsafe>
+ADMIN_PASSWORD=<argon2-hashed-password-or-very-strong-plaintext>
+CORS_ORIGINS=https://voting.example.com,https://www.voting.example.com
+TIMEZONE=America/New_York
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+APP_TITLE=Quorum Voting System
 ```
 
 ### Customization

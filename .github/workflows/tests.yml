@@ -25,7 +25,14 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run all backend tests
-        run: pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
+        run: |
+          pytest \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --cov-report=term-missing \
+            --junitxml=test-results/pytest.xml \
+            tests/
         env:
           REDIS_URL: memory://
 
@@ -37,6 +44,22 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: coverage.xml
           flag-name: backend
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: htmlcov/
+          retention-days: 30
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: test-results/
+          retention-days: 30
 
   frontend-tests:
     name: 🎨 Frontend Tests
@@ -68,4 +91,12 @@ jobs:
           base-path: frontend
           file: test-reports/frontend/coverage/lcov.info
           flag-name: frontend
+
+      - name: Upload frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-report
+          path: frontend/coverage/
+          retention-days: 30
 

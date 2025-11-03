@@ -148,7 +148,7 @@ class TestAPIVersioningIntegration:
 
         assert response.status_code == 200
         assert "X-API-Version" in response.headers
-        assert response.headers["X-API-Version"] == "2.0.0"
+        assert response.headers["X-API-Version"] == "1.0.0"
 
     def test_version_header_on_error_response(self, client):
         """Test version header is present even on error responses."""

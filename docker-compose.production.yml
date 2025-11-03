@@ -48,7 +48,7 @@ services:
       # Application Configuration
       - APP_TITLE=${APP_TITLE:-Quorum Voting System}
       - APP_DESCRIPTION=${APP_DESCRIPTION:-Anonymous QR-driven voting for meetings}
-      - APP_VERSION=${APP_VERSION:-2.0.0}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
       - TIMEZONE=${TIMEZONE:-America/New_York}
       - FRONTEND_BUILD_PATH=${FRONTEND_BUILD_PATH:-./frontend/build}
 

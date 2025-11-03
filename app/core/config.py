@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
+    # Server-Sent Events (SSE) Configuration
+    SSE_USER_INTERVAL: int = 5  # User-facing meeting list updates every 5 seconds
+    SSE_ADMIN_INTERVAL: int = 3  # Admin dashboard updates every 3 seconds (faster for real-time monitoring)
+
     def get_database_url(self) -> str:
         """
         Get database URL from either DATABASE_URL or individual components.

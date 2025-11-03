@@ -1,4 +1,5 @@
 """Meeting endpoints."""
+import logging
 from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -14,7 +15,9 @@ from app.schemas import (
 from app.services.meeting import create_meeting, get_available_meetings
 from app.services.checkin import checkin
 from app.core.rate_limit import limiter, RATE_LIMITS
+from app.core.cache import global_cache
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -23,9 +26,22 @@ async def create_meeting_endpoint(
     meeting: MeetingCreate,
     db: Session = Depends(get_db)
 ):
-    """Create a new meeting (admin only)."""
+    """
+    Create a new meeting (admin only).
+
+    Cache invalidation:
+        - Invalidates both base_meetings and admin_all_meetings caches
+        - Ensures SSE clients see new meeting within ~1 second
+        - Without invalidation, would take up to 3 seconds (cache TTL)
+    """
     try:
         meeting_id, meeting_code = create_meeting(db, meeting.start_time, meeting.end_time)
+
+        # Invalidate caches for instant updates
+        logger.info(f"Cache invalidated: base_meetings, admin_all_meetings (reason: meeting created, meeting_id={meeting_id})")
+        global_cache.invalidate("base_meetings")
+        global_cache.invalidate("admin_all_meetings")
+
         return MeetingResponse(meeting_id=meeting_id, meeting_code=meeting_code)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

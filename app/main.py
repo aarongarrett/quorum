@@ -1,16 +1,20 @@
 """Main FastAPI application."""
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 import os
 
 from app.api.v1.router import api_router
+from app.api.deps import get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.logging_config import setup_logging, get_logger
+from app.core.cache import global_cache
 from app.middleware import LoggingMiddleware
 
 # Initialize structured logging
@@ -52,6 +56,36 @@ app.add_middleware(
 # Include API router
 app.include_router(api_router)
 
+# Health endpoint - must be defined before catch-all route
+@app.get("/health")
+async def health_check(db: Session = Depends(get_db)):
+    """
+    Health check endpoint with cache and database monitoring.
+
+    Returns:
+        - status: "healthy" or "unhealthy"
+        - cache: Cache statistics (size, hits, misses, hit rate)
+        - database: Database connection status
+
+    Returns 503 if database is unreachable.
+    """
+    health_status = {
+        "status": "healthy",
+        "cache": global_cache.get_stats(),
+        "database": "connected"
+    }
+
+    try:
+        # Test database connection with a simple query
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        health_status["status"] = "unhealthy"
+        health_status["database"] = f"error: {str(e)}"
+        logger.error("health_check_failed", error=str(e))
+        raise HTTPException(status_code=503, detail=health_status)
+
+    return health_status
+
 # Serve React static files in production
 if os.path.exists(settings.FRONTEND_BUILD_PATH):
     # Vite uses 'assets' directory instead of 'static'
@@ -78,9 +112,3 @@ if os.path.exists(settings.FRONTEND_BUILD_PATH):
 
         # Otherwise serve index.html (for React Router)
         return FileResponse(f"{settings.FRONTEND_BUILD_PATH}/index.html")
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}

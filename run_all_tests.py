@@ -373,6 +373,40 @@ def main():
     print()
     print_success("PostgreSQL is healthy")
 
+    # Drop and recreate database for fresh start
+    print_step("Resetting database for clean test run...")
+    try:
+        # Drop database if exists (connect to postgres db to avoid "cannot drop currently open database")
+        print_info("Dropping existing database...")
+        result = subprocess.run(
+            ["docker", "exec", "quorum-dev-db-1", "psql", "-U", "quorum", "-d", "postgres", "-c", "DROP DATABASE IF EXISTS quorum;"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.returncode != 0:
+            print_error(f"Failed to drop database: {result.stderr}")
+            print_info("Stdout: " + result.stdout)
+            return 1
+
+        # Create fresh database (still connected to postgres db)
+        print_info("Creating fresh database...")
+        result = subprocess.run(
+            ["docker", "exec", "quorum-dev-db-1", "psql", "-U", "quorum", "-d", "postgres", "-c", "CREATE DATABASE quorum;"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.returncode != 0:
+            print_error(f"Failed to create fresh database")
+            print_error(f"Stderr: {result.stderr}")
+            print_info(f"Stdout: {result.stdout}")
+            return 1
+        print_success("Database reset complete")
+    except Exception as e:
+        print_error(f"Error resetting database: {e}")
+        return 1
+
     # Run database migrations
     print_step("Running database migrations...")
     env = os.environ.copy()

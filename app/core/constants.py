@@ -10,9 +10,9 @@ VOTE_OPTIONS = "ABCDEFGH"
 MAX_VOTE_OPTIONS = len(VOTE_OPTIONS)
 
 # Server-Sent Events (SSE) Configuration
-# How often to send updates to clients (in seconds)
-SSE_USER_INTERVAL = 5  # User-facing meeting list updates every 5 seconds
-SSE_ADMIN_INTERVAL = 3  # Admin dashboard updates every 3 seconds (faster for real-time monitoring)
+# NOTE: SSE intervals have been moved to app.core.config.Settings
+# This allows environment variable override (e.g., SSE_USER_INTERVAL=10)
+# Import from settings instead: from app.core.config import settings
 
 # Meeting Code Configuration
 # Meeting codes are 8-character alphanumeric strings

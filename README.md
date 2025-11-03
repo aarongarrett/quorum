@@ -3,7 +3,7 @@
 ![Tests](https://github.com/aarongarrett/quorum/actions/workflows/tests.yml/badge.svg)
 ![E2E Tests](https://github.com/aarongarrett/quorum/actions/workflows/e2e.yml/badge.svg)
 ![CI & CD](https://github.com/aarongarrett/quorum/actions/workflows/ci.yml/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/aarongarrett/quorum/badge.svg?branch=main)](https://coveralls.io/github/aarongarrett/quorum?branch=main&kill_cache=1)
+[![Coverage Status](https://coveralls.io/repos/github/aarongarrett/quorum/badge.svg?branch=main&kill_cache=1)](https://coveralls.io/github/aarongarrett/quorum?branch=main&kill_cache=1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Anonymous, QR-driven voting for meetings with FastAPI backend and React frontend.

@@ -1,5 +1,6 @@
 // Validate API configuration
-if (import.meta.env.MODE === 'production' && !import.meta.env.VITE_API_URL) {
+// Empty string is allowed for same-origin deployments (e.g., Docker)
+if (import.meta.env.MODE === 'production' && import.meta.env.VITE_API_URL === undefined) {
   throw new Error(
     'VITE_API_URL environment variable is required in production mode. ' +
     'This should have been caught during build. Please check your deployment configuration.'

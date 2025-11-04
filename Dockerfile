@@ -10,6 +10,8 @@ RUN npm install
 
 # Copy all frontend source
 COPY frontend/ ./
+# Set VITE_API_URL to empty string for same-origin deployment
+ENV VITE_API_URL=""
 RUN npm run build
 
 # Debug: List what was built

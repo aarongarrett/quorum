@@ -3,8 +3,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 from typing import Optional, Union
 import os
+import logging
 
 from app.core.constants import ACCESS_TOKEN_EXPIRE_MINUTES as DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -116,9 +119,9 @@ class Settings(BaseSettings):
                 issues.append("CORS_ORIGINS should be restricted to specific domains")
 
             if warnings:
-                print("⚠️  Production configuration warnings:")
+                logger.warning("⚠️  Production configuration warnings:")
                 for warning in warnings:
-                    print(f"  - {warning}")
+                    logger.warning(f"  - {warning}")
 
             if issues:
                 raise ValueError(
@@ -128,7 +131,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-# Validate production configuration on startup
-if os.getenv("ENVIRONMENT") == "production":
-    settings.validate_production_config()

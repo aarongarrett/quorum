@@ -22,6 +22,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Generate unique request ID
         request_id = str(uuid.uuid4())
 
+        # Store request ID in request.state for access in endpoint handlers
+        request.state.request_id = request_id
+
         # Add request ID to context vars (available to all logs in this request)
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(

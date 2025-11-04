@@ -6,12 +6,13 @@ This script runs all tests (backend, frontend, and e2e) with proper setup and te
 It automatically creates a virtual environment, installs dependencies, and cleans up.
 
 Usage:
-    python run_all_tests.py                 # Run all tests
-    python run_all_tests.py --skip-backend  # Skip backend tests
-    python run_all_tests.py --skip-frontend # Skip frontend tests
-    python run_all_tests.py --skip-e2e      # Skip E2E tests
-    python run_all_tests.py --keep-running  # Don't stop servers after tests
-    python run_all_tests.py --keep-venv     # Don't delete venv after tests
+    python run_all_tests.py                      # Run all tests
+    python run_all_tests.py --skip-backend       # Skip backend tests
+    python run_all_tests.py --skip-frontend      # Skip frontend tests
+    python run_all_tests.py --skip-e2e           # Skip E2E tests
+    python run_all_tests.py --keep-running       # Don't stop servers after tests
+    python run_all_tests.py --keep-venv          # Don't delete venv after tests
+    python run_all_tests.py --show-server-output # Show server stdout/stderr (for debugging)
 """
 
 import argparse
@@ -271,6 +272,7 @@ def main():
     parser.add_argument("--skip-e2e", action="store_true", help="Skip E2E tests")
     parser.add_argument("--keep-running", action="store_true", help="Keep servers running after tests")
     parser.add_argument("--keep-venv", action="store_true", help="Keep virtual environment after tests")
+    parser.add_argument("--show-server-output", action="store_true", help="Show backend and frontend server output (for debugging)")
     args = parser.parse_args()
 
     # Register cleanup handlers
@@ -431,13 +433,21 @@ def main():
     #env["ADMIN_PASSWORD"] = "adminpass"  # pulls from .env file instead
 
     # Start uvicorn using venv
-    backend_process = subprocess.Popen(
-        [str(venv_uvicorn), "app.main:app", "--host", "0.0.0.0", "--port", "8000"],
-        cwd=project_root,
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
+    if args.show_server_output:
+        print_info("Starting backend with visible output (--show-server-output enabled)...")
+        backend_process = subprocess.Popen(
+            [str(venv_uvicorn), "app.main:app", "--host", "0.0.0.0", "--port", "8000"],
+            cwd=project_root,
+            env=env
+        )
+    else:
+        backend_process = subprocess.Popen(
+            [str(venv_uvicorn), "app.main:app", "--host", "0.0.0.0", "--port", "8000"],
+            cwd=project_root,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
 
     # Wait for backend to be ready
     print_info("Waiting for backend server to be ready...")
@@ -463,21 +473,35 @@ def main():
 
     # Start Vite dev server
     # On Windows, npm is a .cmd file, so we need shell=True
-    if platform.system() == "Windows":
-        frontend_process = subprocess.Popen(
-            "npm run dev",
-            cwd=frontend_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            shell=True
-        )
+    if args.show_server_output:
+        print_info("Starting frontend with visible output (--show-server-output enabled)...")
+        if platform.system() == "Windows":
+            frontend_process = subprocess.Popen(
+                "npm run dev",
+                cwd=frontend_dir,
+                shell=True
+            )
+        else:
+            frontend_process = subprocess.Popen(
+                ["npm", "run", "dev"],
+                cwd=frontend_dir
+            )
     else:
-        frontend_process = subprocess.Popen(
-            ["npm", "run", "dev"],
-            cwd=frontend_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
+        if platform.system() == "Windows":
+            frontend_process = subprocess.Popen(
+                "npm run dev",
+                cwd=frontend_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=True
+            )
+        else:
+            frontend_process = subprocess.Popen(
+                ["npm", "run", "dev"],
+                cwd=frontend_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
 
     # Wait for frontend to be ready
     print_info("Waiting for frontend server to be ready...")

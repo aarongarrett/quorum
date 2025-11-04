@@ -25,7 +25,8 @@ async def get_all_meetings_endpoint(db: Session = Depends(get_db)):
         meetings = get_all_meetings(db, TIMEZONE, cache=global_cache)
         return meetings
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Error retrieving all meetings: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/meetings/{meeting_id}", response_model=SuccessResponse)

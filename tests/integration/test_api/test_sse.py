@@ -2,7 +2,8 @@
 import pytest
 import json
 from datetime import datetime, timedelta
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, Mock
+from sqlalchemy.exc import DatabaseError
 
 
 @pytest.mark.integration
@@ -365,3 +366,81 @@ class TestSSEEndpointsErrorHandling:
         response = client.get(f"/api/v1/sse/meetings?tokens={tokens_json}")
 
         assert response.status_code == 200
+
+
+@pytest.mark.integration
+class TestSSEErrorLogging:
+    """Test that SSE endpoints log errors with proper context (issue #9.2)."""
+
+    @pytest.mark.asyncio
+    async def test_sse_event_generator_logs_endpoint_name(self, caplog):
+        """Test that event_generator logs endpoint name for context."""
+        from app.api.v1.endpoints.sse import event_generator
+
+        mock_request = Mock()
+        mock_request.is_disconnected = AsyncMock(side_effect=[False, True])
+        mock_request.url = Mock()
+        mock_request.url.path = "/api/v1/sse/test"
+
+        def failing_data_func():
+            raise DatabaseError("connection error", None, None)
+
+        # Collect events
+        events = []
+        async for event in event_generator(mock_request, failing_data_func, interval=0.1, endpoint_name="test_endpoint"):
+            events.append(event)
+            if len(events) >= 3:  # Stop after 3 errors
+                break
+
+        # Verify error was logged with endpoint context
+        assert any("test_endpoint" in record.message for record in caplog.records if record.levelname == "WARNING")
+        assert any("/api/v1/sse/test" in record.message for record in caplog.records if record.levelname == "WARNING")
+
+    @pytest.mark.asyncio
+    async def test_sse_event_generator_logs_unexpected_errors_with_context(self, caplog):
+        """Test that unexpected errors are logged with full context."""
+        from app.api.v1.endpoints.sse import event_generator
+
+        mock_request = Mock()
+        mock_request.is_disconnected = AsyncMock(return_value=False)
+        mock_request.url = Mock()
+        mock_request.url.path = "/api/v1/sse/admin/meetings"
+
+        def failing_data_func():
+            raise AttributeError("'NoneType' object has no attribute 'polls'")
+
+        # Collect events
+        events = []
+        async for event in event_generator(mock_request, failing_data_func, interval=0.1, endpoint_name="sse_admin_meetings"):
+            events.append(event)
+            break  # Stop after first error
+
+        # Verify error was logged with endpoint context
+        assert any("sse_admin_meetings" in record.message for record in caplog.records if record.levelname == "ERROR")
+        assert any("/api/v1/sse/admin/meetings" in record.message for record in caplog.records if record.levelname == "ERROR")
+
+    @pytest.mark.asyncio
+    async def test_sse_event_generator_includes_endpoint_on_termination(self, caplog):
+        """Test that termination after consecutive errors includes endpoint context."""
+        from app.api.v1.endpoints.sse import event_generator
+
+        mock_request = Mock()
+        mock_request.is_disconnected = AsyncMock(return_value=False)
+        mock_request.url = Mock()
+        mock_request.url.path = "/api/v1/sse/meetings"
+
+        consecutive_errors = {"count": 0}
+
+        def failing_data_func():
+            consecutive_errors["count"] += 1
+            raise DatabaseError("connection error", None, None)
+
+        # Collect events until stream ends
+        events = []
+        async for event in event_generator(mock_request, failing_data_func, interval=0.01, endpoint_name="sse_meetings"):
+            events.append(event)
+
+        # Should have terminated after max_consecutive_errors
+        # Verify termination was logged with endpoint context
+        error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
+        assert any("sse_meetings" in record.message and "terminating" in record.message.lower() for record in error_logs)

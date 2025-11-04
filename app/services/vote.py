@@ -1,6 +1,7 @@
 """Vote business logic."""
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models import Meeting, Poll, PollVote
 from app.core.utils import is_available
@@ -52,11 +53,16 @@ def vote_in_poll(db: Session, meeting_id: int, poll_id: int, token: str, vote: s
     try:
         db.add(vote_record)
         db.commit()
-    except Exception as e:
+    except IntegrityError as e:
         db.rollback()
         # Handle race condition: duplicate vote due to concurrent requests
         # The unique constraint (poll_id, checkin_id) prevents duplicate votes
-        if "uq_poll_checkin" in str(e) or "unique constraint" in str(e).lower():
+        # Check if this is the specific constraint we expect
+        error_info = str(e.orig) if hasattr(e, 'orig') else str(e)
+        error_lower = error_info.lower()
+        # Check for the specific constraint name or the combination of poll_id + checkin_id
+        if ("uq_poll_checkin" in error_lower or
+            ("poll_id" in error_lower and "checkin_id" in error_lower)):
             raise ValueError("You have already voted in this poll")
-        # Re-raise other exceptions
+        # Re-raise other integrity errors (shouldn't happen with valid data)
         raise

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def event_generator(request: Request, data_func, interval: int = 5):
+async def event_generator(request: Request, data_func, interval: int = 5, endpoint_name: str = "unknown"):
     """
     Generic SSE event generator.
 
@@ -25,6 +25,7 @@ async def event_generator(request: Request, data_func, interval: int = 5):
         request: FastAPI request object to check for client disconnect
         data_func: Function that returns the data to send
         interval: Seconds between updates
+        endpoint_name: Name of the endpoint for logging context
     """
     consecutive_errors = 0
     max_consecutive_errors = 3  # Terminate after 3 consecutive failures
@@ -43,17 +44,26 @@ async def event_generator(request: Request, data_func, interval: int = 5):
             except (SQLAlchemyError, DatabaseError) as e:
                 # Database errors - expected, can retry
                 consecutive_errors += 1
-                logger.warning(f"SSE database error (attempt {consecutive_errors}/{max_consecutive_errors}): {e}")
+                logger.warning(
+                    f"SSE database error for endpoint {endpoint_name} ({request.url.path}), "
+                    f"attempt {consecutive_errors}/{max_consecutive_errors}: {e}"
+                )
 
                 # Only terminate after multiple consecutive failures
                 # This allows recovery from transient database hiccups
                 if consecutive_errors >= max_consecutive_errors:
+                    logger.error(
+                        f"SSE terminating for endpoint {endpoint_name} ({request.url.path}) "
+                        f"after {max_consecutive_errors} consecutive database errors"
+                    )
                     yield f"event: error\ndata: {json.dumps({'error': 'Service temporarily unavailable'})}\n\n"
                     break
                 # Otherwise, skip this update and retry after the interval
             except Exception as e:
                 # Unexpected errors (AttributeError, KeyError, etc.) - log full trace and terminate
-                logger.exception(f"SSE unexpected error: {e}")
+                logger.exception(
+                    f"SSE unexpected error for endpoint {endpoint_name} ({request.url.path}): {e}"
+                )
                 yield f"event: error\ndata: {json.dumps({'error': 'Internal error'})}\n\n"
                 break
 
@@ -62,6 +72,7 @@ async def event_generator(request: Request, data_func, interval: int = 5):
 
     except asyncio.CancelledError:
         # Client disconnected
+        logger.debug(f"SSE connection cancelled for endpoint {endpoint_name} ({request.url.path})")
         pass
 
 
@@ -93,7 +104,7 @@ async def sse_meetings(request: Request, tokens: str = ""):
             return get_available_meetings(db, token_map, TIMEZONE, cache=global_cache)
 
     return StreamingResponse(
-        event_generator(request, get_data, interval=settings.SSE_USER_INTERVAL),
+        event_generator(request, get_data, interval=settings.SSE_USER_INTERVAL, endpoint_name="sse_meetings"),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -125,7 +136,7 @@ async def sse_admin_meetings(request: Request, admin: dict = Depends(verify_admi
             return get_all_meetings(db, TIMEZONE, cache=global_cache)
 
     return StreamingResponse(
-        event_generator(request, get_data, interval=settings.SSE_ADMIN_INTERVAL),
+        event_generator(request, get_data, interval=settings.SSE_ADMIN_INTERVAL, endpoint_name="sse_admin_meetings"),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

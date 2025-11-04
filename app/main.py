@@ -21,6 +21,11 @@ from app.middleware import LoggingMiddleware
 setup_logging(level=settings.LOG_LEVEL)
 logger = get_logger(__name__)
 
+# Validate production configuration after logging is configured
+# This ensures settings.ENVIRONMENT can be safely accessed and properly reads from .env or env vars
+if settings.ENVIRONMENT == "production":
+    settings.validate_production_config()
+
 logger.info(
     "application_starting",
     app_title=settings.APP_TITLE,
@@ -68,27 +73,58 @@ app.include_router(api_router)
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):
     """
-    Health check endpoint with cache and database monitoring.
+    Health check endpoint with comprehensive metrics.
 
     Returns:
         - status: "healthy" or "unhealthy"
         - cache: Cache statistics (size, hits, misses, hit rate)
-        - database: Database connection status
+        - database: Database connection status and pool metrics
+        - memory: Memory usage statistics
+        - environment: Current environment setting
 
     Returns 503 if database is unreachable.
     """
+    from app.db.session import engine
+
     health_status = {
         "status": "healthy",
+        "environment": settings.ENVIRONMENT,
         "cache": global_cache.get_stats(),
-        "database": "connected"
+        "database": {
+            "status": "connected",
+            "pool": {
+                "size": engine.pool.size(),
+                "checked_in": engine.pool.checkedin(),
+                "checked_out": engine.pool.checkedout(),
+                "overflow": engine.pool.overflow(),
+                "total_connections": engine.pool.checkedout() + engine.pool.checkedin(),
+            }
+        }
     }
+
+    # Try to get memory usage if psutil is available (cross-platform)
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        health_status["memory"] = {
+            "rss_mb": round(memory_info.rss / 1024 / 1024, 2),
+            "vms_mb": round(memory_info.vms / 1024 / 1024, 2),
+            "percent": round(process.memory_percent(), 2),
+        }
+    except ImportError:
+        # psutil not available, skip memory metrics
+        health_status["memory"] = {"status": "psutil not installed"}
+    except Exception as e:
+        logger.warning("health_check_memory_error", error=str(e))
+        health_status["memory"] = {"error": "unable to read"}
 
     try:
         # Test database connection with a simple query
         db.execute(text("SELECT 1"))
     except Exception as e:
         health_status["status"] = "unhealthy"
-        health_status["database"] = f"error: {str(e)}"
+        health_status["database"]["status"] = f"error: {str(e)}"
         logger.error("health_check_failed", error=str(e))
         raise HTTPException(status_code=503, detail=health_status)
 

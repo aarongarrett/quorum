@@ -161,7 +161,8 @@ async def get_available_meetings_endpoint(
         meetings = get_available_meetings(db, token_map, TIMEZONE)
         return meetings
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Error retrieving available meetings: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/{meeting_id}/checkins", response_model=CheckinResponse)

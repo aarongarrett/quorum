@@ -1,5 +1,6 @@
 """Integration tests for admin API endpoints."""
 import pytest
+from unittest.mock import patch
 from app.core.cache import global_cache
 
 
@@ -202,7 +203,7 @@ class TestHealthEndpoint:
 
         # Verify status
         assert data["status"] == "healthy"
-        assert data["database"] == "connected"
+        assert data["database"]["status"] == "connected"
 
         # Verify cache stats are included
         cache_stats = data["cache"]
@@ -222,7 +223,7 @@ class TestHealthEndpoint:
 
         # Should succeed with test database
         assert data["status"] == "healthy"
-        assert data["database"] == "connected"
+        assert data["database"]["status"] == "connected"
 
     def test_health_check_cache_metrics(self, client):
         """Test that health endpoint returns valid cache metrics."""
@@ -248,3 +249,107 @@ class TestHealthEndpoint:
 
         # Hit rate should be between 0 and 100
         assert 0 <= cache_stats["hit_rate_percent"] <= 100
+
+    def test_health_check_comprehensive_metrics(self, client):
+        """Test that health endpoint includes comprehensive metrics (issue #11.2)."""
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify comprehensive response structure
+        assert "status" in data
+        assert "environment" in data
+        assert "cache" in data
+        assert "database" in data
+        assert "memory" in data
+
+        # Verify environment is included
+        assert data["environment"] in ["development", "production", "staging"]
+
+        # Verify database pool metrics are included
+        database = data["database"]
+        assert "status" in database
+        assert "pool" in database
+        pool = database["pool"]
+        assert "size" in pool
+        assert "checked_in" in pool
+        assert "checked_out" in pool
+        assert "overflow" in pool
+        assert "total_connections" in pool
+
+        # Verify pool metrics are valid
+        assert isinstance(pool["size"], int)
+        assert isinstance(pool["checked_in"], int)
+        assert isinstance(pool["checked_out"], int)
+        assert isinstance(pool["overflow"], int)
+        assert isinstance(pool["total_connections"], int)
+        assert pool["total_connections"] == pool["checked_in"] + pool["checked_out"]
+
+        # Verify memory metrics are included (may vary based on psutil availability)
+        memory = data["memory"]
+        assert isinstance(memory, dict)
+        # Either has actual metrics or error/status indicator
+        assert len(memory) > 0
+
+    def test_health_check_database_pool_status(self, client):
+        """Test that database pool metrics are accurate."""
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        pool = data["database"]["pool"]
+
+        # Pool should have reasonable values
+        assert pool["size"] >= 0
+        assert pool["checked_in"] >= 0
+        assert pool["checked_out"] >= 0
+        # Note: overflow can be negative in SQLAlchemy (means no overflow yet)
+        assert isinstance(pool["overflow"], int)
+
+        # Total connections should match sum
+        assert pool["total_connections"] == pool["checked_in"] + pool["checked_out"]
+
+
+@pytest.mark.integration
+class TestErrorMessageSecurity:
+    """Test that error messages don't expose sensitive information (issue #2.5)."""
+
+    def test_admin_get_meetings_error_no_disclosure(self, admin_client):
+        """Test that errors in admin endpoint return generic messages."""
+        # Mock get_all_meetings to raise an exception
+        with patch('app.api.v1.endpoints.admin.get_all_meetings') as mock_get:
+            mock_get.side_effect = Exception("Internal database connection string: postgresql://user:pass@host/db")
+
+            response = admin_client.get("/api/v1/admin/meetings")
+
+            # Should return 500
+            assert response.status_code == 500
+
+            # Response should contain generic error message, not the actual exception
+            data = response.json()
+            assert data["detail"] == "Internal server error"
+            # Should NOT contain the sensitive information from the exception
+            assert "postgresql" not in data["detail"]
+            assert "connection string" not in data["detail"]
+            assert "pass@host" not in data["detail"]
+
+    def test_meetings_available_error_no_disclosure(self, client):
+        """Test that errors in available meetings endpoint return generic messages."""
+        # Mock get_available_meetings to raise an exception
+        with patch('app.api.v1.endpoints.meetings.get_available_meetings') as mock_get:
+            mock_get.side_effect = Exception("AttributeError in /app/services/meeting.py line 42: 'NoneType' has no attribute 'polls'")
+
+            response = client.post("/api/v1/meetings/available", json={})
+
+            # Should return 500
+            assert response.status_code == 500
+
+            # Response should contain generic error message
+            data = response.json()
+            assert data["detail"] == "Internal server error"
+            # Should NOT contain file paths or implementation details
+            assert "/app/services" not in data["detail"]
+            assert "AttributeError" not in data["detail"]
+            assert "line 42" not in data["detail"]

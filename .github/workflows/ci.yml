@@ -53,6 +53,8 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+        env:
+          VITE_API_URL: http://localhost:8000
 
   publish:
     name: 🚀 Build & Push Docker Image

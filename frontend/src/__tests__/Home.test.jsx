@@ -754,4 +754,506 @@ describe('Home Component', () => {
     // This is more of a smoke test - component doesn't crash with rapid clicks
     expect(checkinCalls.length).toBeLessThanOrEqual(5);
   });
+
+  // Vote privacy tests
+
+  test('vote is initially visible when poll data first loads', async () => {
+    jest.useFakeTimers();
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json([
+            {
+              id: 1,
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 3600000).toISOString(),
+              meeting_code: 'TEST1234',
+              checked_in: true,
+              polls: [
+                {
+                  id: 1,
+                  name: 'Test Poll',
+                  vote: 'A'
+                }
+              ]
+            }
+          ])
+        );
+      })
+    );
+
+    await renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+      expect(screen.getByText('A')).toBeInTheDocument();
+    });
+
+    jest.useRealTimers();
+  });
+
+  test('vote auto-hides after 3 seconds', async () => {
+    jest.useFakeTimers();
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json([
+            {
+              id: 1,
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 3600000).toISOString(),
+              meeting_code: 'TEST1234',
+              checked_in: true,
+              polls: [
+                {
+                  id: 1,
+                  name: 'Test Poll',
+                  vote: 'A'
+                }
+              ]
+            }
+          ])
+        );
+      })
+    );
+
+    await renderHome();
+
+    // Vote should be visible initially
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Fast-forward 3 seconds
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Vote should now be hidden, "Show Vote" button should be visible
+    await waitFor(() => {
+      expect(screen.queryByText(/You have voted:/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Show Vote/i })).toBeInTheDocument();
+    });
+
+    jest.useRealTimers();
+  });
+
+  test('clicking "Show Vote" button reveals the vote', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json([
+            {
+              id: 1,
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 3600000).toISOString(),
+              meeting_code: 'TEST1234',
+              checked_in: true,
+              polls: [
+                {
+                  id: 1,
+                  name: 'Test Poll',
+                  vote: 'B'
+                }
+              ]
+            }
+          ])
+        );
+      })
+    );
+
+    await renderHome();
+
+    // Vote should be visible initially
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Fast-forward to hide the vote
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Wait for "Show Vote" button to appear
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Show Vote/i })).toBeInTheDocument();
+    });
+
+    const showVoteButton = screen.getByRole('button', { name: /Show Vote/i });
+
+    // Click the button
+    await act(async () => {
+      await user.click(showVoteButton);
+    });
+
+    // Vote should be visible again
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+      expect(screen.getByText('B')).toBeInTheDocument();
+    });
+
+    jest.useRealTimers();
+  });
+
+  test('vote auto-hides again after 3 seconds when revealed via button', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json([
+            {
+              id: 1,
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 3600000).toISOString(),
+              meeting_code: 'TEST1234',
+              checked_in: true,
+              polls: [
+                {
+                  id: 1,
+                  name: 'Test Poll',
+                  vote: 'C'
+                }
+              ]
+            }
+          ])
+        );
+      })
+    );
+
+    await renderHome();
+
+    // Vote should be visible initially
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Fast-forward to hide the vote
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Wait for "Show Vote" button
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Show Vote/i })).toBeInTheDocument();
+    });
+
+    const showVoteButton = screen.getByRole('button', { name: /Show Vote/i });
+
+    // Click to reveal vote
+    await act(async () => {
+      await user.click(showVoteButton);
+    });
+
+    // Vote should be visible
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Fast-forward another 3 seconds
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Vote should be hidden again
+    await waitFor(() => {
+      expect(screen.queryByText(/You have voted:/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Show Vote/i })).toBeInTheDocument();
+    });
+
+    jest.useRealTimers();
+  });
+
+  test('multiple polls each have independent vote visibility timers', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json([
+            {
+              id: 1,
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 3600000).toISOString(),
+              meeting_code: 'TEST1234',
+              checked_in: true,
+              polls: [
+                {
+                  id: 1,
+                  name: 'Poll 1',
+                  vote: 'A'
+                },
+                {
+                  id: 2,
+                  name: 'Poll 2',
+                  vote: 'B'
+                }
+              ]
+            }
+          ])
+        );
+      })
+    );
+
+    await renderHome();
+
+    // Both votes should be visible initially
+    await waitFor(() => {
+      const voteTexts = screen.getAllByText(/You have voted:/i);
+      expect(voteTexts.length).toBe(2);
+    });
+
+    // Fast-forward 3 seconds
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Both votes should be hidden
+    await waitFor(() => {
+      expect(screen.queryByText(/You have voted:/i)).not.toBeInTheDocument();
+      const showButtons = screen.getAllByRole('button', { name: /Show Vote/i });
+      expect(showButtons.length).toBe(2);
+    });
+
+    // Click first "Show Vote" button
+    const showButtons = screen.getAllByRole('button', { name: /Show Vote/i });
+    await act(async () => {
+      await user.click(showButtons[0]);
+    });
+
+    // Only first vote should be visible
+    await waitFor(() => {
+      const voteTexts = screen.getAllByText(/You have voted:/i);
+      expect(voteTexts.length).toBe(1);
+    });
+
+    // Fast-forward 3 seconds again
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // First vote should be hidden again
+    await waitFor(() => {
+      expect(screen.queryByText(/You have voted:/i)).not.toBeInTheDocument();
+      const showButtons = screen.getAllByRole('button', { name: /Show Vote/i });
+      expect(showButtons.length).toBe(2);
+    });
+
+    jest.useRealTimers();
+  });
+
+  test('timers are cleaned up on component unmount', async () => {
+    jest.useFakeTimers();
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json([
+            {
+              id: 1,
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 3600000).toISOString(),
+              meeting_code: 'TEST1234',
+              checked_in: true,
+              polls: [
+                {
+                  id: 1,
+                  name: 'Test Poll',
+                  vote: 'A'
+                }
+              ]
+            }
+          ])
+        );
+      })
+    );
+
+    const { unmount } = await renderHome();
+
+    // Vote should be visible initially
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Unmount component before timer fires
+    unmount();
+
+    // Fast-forward timers (should not cause any errors)
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
+
+    // No errors should occur from timers trying to update unmounted component
+    jest.useRealTimers();
+  });
+
+  test('clicking "Show Vote" multiple times rapidly only sets one timer', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json([
+            {
+              id: 1,
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 3600000).toISOString(),
+              meeting_code: 'TEST1234',
+              checked_in: true,
+              polls: [
+                {
+                  id: 1,
+                  name: 'Test Poll',
+                  vote: 'D'
+                }
+              ]
+            }
+          ])
+        );
+      })
+    );
+
+    await renderHome();
+
+    // Wait for initial visibility
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Fast-forward to hide
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Wait for button
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Show Vote/i })).toBeInTheDocument();
+    });
+
+    const showVoteButton = screen.getByRole('button', { name: /Show Vote/i });
+
+    // Click multiple times rapidly
+    await act(async () => {
+      await user.click(showVoteButton);
+    });
+
+    await act(async () => {
+      await user.click(showVoteButton);
+    });
+
+    await act(async () => {
+      await user.click(showVoteButton);
+    });
+
+    // Vote should be visible
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Fast-forward 3 seconds
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Vote should be hidden (only one timer was set)
+    await waitFor(() => {
+      expect(screen.queryByText(/You have voted:/i)).not.toBeInTheDocument();
+    });
+
+    jest.useRealTimers();
+  });
+
+  test('vote does not re-show when SSE updates arrive with same vote data', async () => {
+    jest.useFakeTimers();
+
+    const meetingData = {
+      id: 1,
+      start_time: new Date().toISOString(),
+      end_time: new Date(Date.now() + 3600000).toISOString(),
+      meeting_code: 'TEST1234',
+      checked_in: true,
+      polls: [
+        {
+          id: 1,
+          name: 'Test Poll',
+          vote: 'A'
+        }
+      ]
+    };
+
+    server.use(
+      rest.post('/api/v1/meetings/available', (req, res, ctx) => {
+        return res(ctx.status(200), ctx.json([meetingData]));
+      })
+    );
+
+    // Capture EventSource instance
+    let eventSourceInstance = null;
+    const originalEventSource = global.EventSource;
+    global.EventSource = class MockEventSource {
+      constructor(url) {
+        this.url = url;
+        this.readyState = 1;
+        this.onmessage = null;
+        this.onerror = null;
+        eventSourceInstance = this; // Capture the instance
+      }
+      close() {
+        this.readyState = 2;
+      }
+    };
+
+    await renderHome();
+
+    // Vote should be visible initially
+    await waitFor(() => {
+      expect(screen.getByText(/You have voted:/i)).toBeInTheDocument();
+    });
+
+    // Fast-forward 3 seconds to hide the vote
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    // Vote should be hidden
+    await waitFor(() => {
+      expect(screen.queryByText(/You have voted:/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Show Vote/i })).toBeInTheDocument();
+    });
+
+    // Simulate SSE sending an update with the same vote data
+    if (eventSourceInstance && eventSourceInstance.onmessage) {
+      await act(async () => {
+        eventSourceInstance.onmessage({
+          data: JSON.stringify([meetingData])
+        });
+      });
+    }
+
+    // Vote should STILL be hidden (not re-shown)
+    // This test should FAIL with current implementation because the useEffect
+    // will see poll.vote exists and !visibleVotes[poll.id] and re-show it
+    await waitFor(() => {
+      expect(screen.queryByText(/You have voted:/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Show Vote/i })).toBeInTheDocument();
+    });
+
+    global.EventSource = originalEventSource;
+    jest.useRealTimers();
+  });
 });

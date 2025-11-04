@@ -348,6 +348,16 @@ body {
   width: 100%;
 }
 
+.show-vote-btn {
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+}
+
+.vote-status .btn {
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+}
+
 /* Admin Dashboard */
 .admin-dashboard {
   width: 100%;

@@ -114,7 +114,7 @@ uvicorn app.main:app --reload
 # Setup frontend (new terminal)
 cd frontend
 npm install
-npm start
+npm run dev
 ```
 
 **Frontend:** http://localhost:3000
@@ -244,7 +244,7 @@ cd frontend
 npm install
 
 # Development server (proxies to localhost:8000)
-npm start
+npm run dev
 
 # Production build
 npm run build
@@ -491,7 +491,7 @@ uvicorn app.main:app --reload
 
 # Terminal 3: Frontend
 cd frontend
-npm start
+npm run dev
 ```
 
 **Access Points:**
@@ -525,7 +525,7 @@ pytest --cov=app              # With coverage
 uvicorn app.main:app --reload # Dev server
 
 # Frontend
-npm start                     # Dev server
+npm run dev                   # Dev server
 npm test                      # Run tests
 npm run build                 # Production build
 

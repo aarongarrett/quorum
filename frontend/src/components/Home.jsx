@@ -13,6 +13,9 @@ function Home() {
   const sseRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const checkedInFromQR = useRef(false);
+  const [visibleVotes, setVisibleVotes] = useState({});
+  const voteTimersRef = useRef({});
+  const seenVotesRef = useRef(new Set()); // Track which poll IDs have already been auto-shown
 
   // Get token map from localStorage
   const getTokenMap = () => {
@@ -107,6 +110,42 @@ function Home() {
     }
   }, [meetings, searchParams, setSearchParams]);
 
+  // Auto-hide votes after 3 seconds when they first appear
+  useEffect(() => {
+    meetings.forEach(meeting => {
+      if (meeting.checked_in && meeting.polls) {
+        meeting.polls.forEach(poll => {
+          // Only auto-show if: vote exists AND not already seen AND not currently visible
+          if (poll.vote && !seenVotesRef.current.has(poll.id) && !visibleVotes[poll.id]) {
+            // Mark this vote as seen so we don't auto-show it again on SSE updates
+            seenVotesRef.current.add(poll.id);
+
+            // Vote exists but not currently visible - show it for 3 seconds
+            setVisibleVotes(prev => ({ ...prev, [poll.id]: true }));
+
+            // Clear any existing timer for this poll
+            if (voteTimersRef.current[poll.id]) {
+              clearTimeout(voteTimersRef.current[poll.id]);
+            }
+
+            // Set timer to hide after 3 seconds
+            voteTimersRef.current[poll.id] = setTimeout(() => {
+              setVisibleVotes(prev => ({ ...prev, [poll.id]: false }));
+              delete voteTimersRef.current[poll.id];
+            }, 3000);
+          }
+        });
+      }
+    });
+  }, [meetings]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(voteTimersRef.current).forEach(timer => clearTimeout(timer));
+    };
+  }, []);
+
   const handleCheckin = (meeting) => {
     setSelectedMeeting(meeting);
     setShowCheckinModal(true);
@@ -144,6 +183,22 @@ function Home() {
       cleanupOldTokens(data);
       setMeetings(data);
     }).catch(console.error);
+  };
+
+  const handleShowVote = (pollId) => {
+    // Show the vote
+    setVisibleVotes(prev => ({ ...prev, [pollId]: true }));
+
+    // Clear any existing timer for this poll
+    if (voteTimersRef.current[pollId]) {
+      clearTimeout(voteTimersRef.current[pollId]);
+    }
+
+    // Set timer to hide after 3 seconds
+    voteTimersRef.current[pollId] = setTimeout(() => {
+      setVisibleVotes(prev => ({ ...prev, [pollId]: false }));
+      delete voteTimersRef.current[pollId];
+    }, 3000);
   };
 
   return (
@@ -193,13 +248,22 @@ function Home() {
                             <h3 className="poll-title">{poll.name}</h3>
                             <div className="vote-status">
                               {poll.vote ? (
-                                <div className="status-message vote-cast">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.5rem' }}>
-                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                  </svg>
-                                  <span>You have voted: <strong>{poll.vote}</strong></span>
-                                </div>
+                                visibleVotes[poll.id] ? (
+                                  <div className="status-message vote-cast">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.5rem' }}>
+                                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                    </svg>
+                                    <span>You have voted: <strong>{poll.vote}</strong></span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="btn btn-secondary show-vote-btn"
+                                    onClick={() => handleShowVote(poll.id)}
+                                  >
+                                    Show Vote
+                                  </button>
+                                )
                               ) : (
                                 <button
                                   className="btn btn-primary"

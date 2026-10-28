@@ -55,7 +55,7 @@ Quorum is a secure, anonymous voting system designed for meetings. Built with mo
 ### Prerequisites
 
 - Docker & Docker Compose
-- Node.js 18+ (for local frontend development)
+- Node.js 22+ (for local frontend development)
 - Python 3.11+ (for local backend development)
 
 ### Using Docker (Recommended)

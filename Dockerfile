@@ -1,7 +1,7 @@
 # Multi-stage build: Build React frontend, then FastAPI backend
 
 # Stage 1: Build React frontend
-FROM node:18-alpine AS frontend-build
+FROM node:22.23.4-alpine AS frontend-build
 WORKDIR /app
 
 # Copy package files from frontend directory
@@ -28,6 +28,7 @@ ENV PYTHONPATH=/app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    ca-certificates \
     postgresql-client \
     curl \
     && rm -rf /var/lib/apt/lists/*
